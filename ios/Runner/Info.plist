@@ -66,5 +66,9 @@
 		<string>UIInterfaceOrientationLandscapeLeft</string>
 		<string>UIInterfaceOrientationLandscapeRight</string>
 	</array>
+	<key>NSCameraUsageDescription</key>
+	<string>Sprintify memerlukan akses kamera untuk merekam tes lari 60 m.</string>
+	<key>NSMicrophoneUsageDescription</key>
+	<string>Sprintify memerlukan akses mikrofon untuk audio pada rekaman video.</string>
 </dict>
 </plist>

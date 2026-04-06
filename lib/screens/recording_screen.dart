@@ -1,7 +1,10 @@
 import 'dart:async';
 
+import 'package:camera/camera.dart';
+import 'package:flutter/foundation.dart' show defaultTargetPlatform, kIsWeb, TargetPlatform;
 import 'package:flutter/material.dart';
 import 'package:go_router/go_router.dart';
+import 'package:permission_handler/permission_handler.dart';
 import 'package:provider/provider.dart';
 
 import '../models/test_mode.dart';
@@ -19,13 +22,100 @@ class _RecordingScreenState extends State<RecordingScreen> {
   int _seconds = 0;
   Timer? _timer;
 
+  CameraController? _cameraController;
+  bool _cameraInitializing = false;
+  String? _cameraError;
+
+  bool get _isMobile =>
+      !kIsWeb &&
+      (defaultTargetPlatform == TargetPlatform.android ||
+          defaultTargetPlatform == TargetPlatform.iOS);
+
+  bool get _cameraLive =>
+      _isMobile && _cameraController != null && _cameraController!.value.isInitialized;
+
+  @override
+  void initState() {
+    super.initState();
+    if (_isMobile) {
+      _initCamera();
+    }
+  }
+
+  Future<void> _initCamera() async {
+    setState(() {
+      _cameraInitializing = true;
+      _cameraError = null;
+    });
+    final cam = await Permission.camera.status;
+    final mic = await Permission.microphone.status;
+    if (!cam.isGranted || !mic.isGranted) {
+      if (mounted) {
+        setState(() {
+          _cameraInitializing = false;
+          _cameraError = 'Izin kamera atau mikrofon belum diberikan. Aktifkan di pengaturan aplikasi.';
+        });
+      }
+      return;
+    }
+    try {
+      final cameras = await availableCameras();
+      if (cameras.isEmpty) {
+        if (mounted) {
+          setState(() {
+            _cameraInitializing = false;
+            _cameraError = 'Tidak ada kamera yang tersedia.';
+          });
+        }
+        return;
+      }
+      CameraDescription selected = cameras.first;
+      for (final c in cameras) {
+        if (c.lensDirection == CameraLensDirection.back) {
+          selected = c;
+          break;
+        }
+      }
+      final controller = CameraController(
+        selected,
+        ResolutionPreset.medium,
+        enableAudio: true,
+      );
+      await controller.initialize();
+      if (!mounted) {
+        await controller.dispose();
+        return;
+      }
+      setState(() {
+        _cameraController = controller;
+        _cameraInitializing = false;
+      });
+    } catch (e) {
+      if (mounted) {
+        setState(() {
+          _cameraInitializing = false;
+          _cameraError = e.toString();
+        });
+      }
+    }
+  }
+
   @override
   void dispose() {
     _timer?.cancel();
+    _cameraController?.dispose();
     super.dispose();
   }
 
-  void _toggle() {
+  Future<void> _toggle() async {
+    if (_cameraLive) {
+      await _toggleVideoRecording();
+    } else {
+      _toggleMockRecording();
+    }
+  }
+
+  void _toggleMockRecording() {
     setState(() {
       _recording = !_recording;
       if (_recording) {
@@ -41,8 +131,45 @@ class _RecordingScreenState extends State<RecordingScreen> {
     });
   }
 
-  void _finish() {
+  Future<void> _toggleVideoRecording() async {
+    final c = _cameraController;
+    if (c == null || !c.value.isInitialized) return;
+    try {
+      if (!_recording) {
+        await c.startVideoRecording();
+        if (!mounted) return;
+        setState(() {
+          _recording = true;
+          _seconds = 0;
+          _timer = Timer.periodic(const Duration(seconds: 1), (_) {
+            if (!mounted) return;
+            setState(() => _seconds++);
+          });
+        });
+      } else {
+        await c.stopVideoRecording();
+        _timer?.cancel();
+        _timer = null;
+        if (!mounted) return;
+        setState(() => _recording = false);
+      }
+    } catch (e) {
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(content: Text('Rekaman gagal: $e')),
+        );
+      }
+    }
+  }
+
+  Future<void> _finish() async {
+    if (_recording && _cameraLive && _cameraController!.value.isRecordingVideo) {
+      try {
+        await _cameraController!.stopVideoRecording();
+      } catch (_) {}
+    }
     _timer?.cancel();
+    if (!mounted) return;
     context.push('/processing');
   }
 
@@ -112,43 +239,7 @@ class _RecordingScreenState extends State<RecordingScreen> {
                     child: Stack(
                       fit: StackFit.expand,
                       children: [
-                        Container(
-                          decoration: BoxDecoration(
-                            gradient: LinearGradient(
-                              begin: Alignment.topLeft,
-                              end: Alignment.bottomRight,
-                              colors: [
-                                Theme.of(context).colorScheme.surfaceContainerHighest,
-                                Theme.of(context).colorScheme.surfaceContainerHigh,
-                              ],
-                            ),
-                          ),
-                          child: Column(
-                            mainAxisAlignment: MainAxisAlignment.center,
-                            children: [
-                              Icon(
-                                Icons.videocam_outlined,
-                                size: 64,
-                                color: Theme.of(context).colorScheme.outline,
-                              ),
-                              const SizedBox(height: 12),
-                              Text(
-                                'Preview kamera (demo)',
-                                style: Theme.of(context).textTheme.titleSmall?.copyWith(
-                                      color: Theme.of(context).colorScheme.onSurfaceVariant,
-                                    ),
-                              ),
-                              const SizedBox(height: 8),
-                              Text(
-                                'Video akan dikirim ke backend pada produksi.',
-                                textAlign: TextAlign.center,
-                                style: Theme.of(context).textTheme.bodySmall?.copyWith(
-                                      color: Theme.of(context).colorScheme.outline,
-                                    ),
-                              ),
-                            ],
-                          ),
-                        ),
+                        _buildPreview(context),
                         if (_recording)
                           Positioned(
                             top: 12,
@@ -200,7 +291,7 @@ class _RecordingScreenState extends State<RecordingScreen> {
                 children: [
                   Expanded(
                     child: FilledButton.tonal(
-                      onPressed: _toggle,
+                      onPressed: _cameraInitializing ? null : _toggle,
                       child: Text(_recording ? 'Jeda' : 'Mulai rekaman'),
                     ),
                   ),
@@ -217,7 +308,9 @@ class _RecordingScreenState extends State<RecordingScreen> {
             Padding(
               padding: const EdgeInsets.only(bottom: 16),
               child: Text(
-                'Demo: tidak ada unggahan nyata.',
+                _isMobile && _cameraLive
+                    ? 'Preview kamera aktif. Video dapat dikirim ke backend pada produksi.'
+                    : 'Demo: tidak ada unggahan nyata.',
                 textAlign: TextAlign.center,
                 style: Theme.of(context).textTheme.labelSmall?.copyWith(
                       color: Theme.of(context).colorScheme.outline,
@@ -227,6 +320,95 @@ class _RecordingScreenState extends State<RecordingScreen> {
           ],
         ),
       ),
+    );
+  }
+
+  Widget _buildPreview(BuildContext context) {
+    if (_cameraInitializing) {
+      return ColoredBox(
+        color: Theme.of(context).colorScheme.surfaceContainerHighest,
+        child: const Center(child: CircularProgressIndicator()),
+      );
+    }
+    if (_cameraError != null) {
+      return ColoredBox(
+        color: Theme.of(context).colorScheme.surfaceContainerHighest,
+        child: Padding(
+          padding: const EdgeInsets.all(16),
+          child: Column(
+            mainAxisAlignment: MainAxisAlignment.center,
+            children: [
+              Icon(Icons.videocam_off_outlined, size: 48, color: Theme.of(context).colorScheme.outline),
+              const SizedBox(height: 12),
+              Text(
+                _cameraError!,
+                textAlign: TextAlign.center,
+                style: Theme.of(context).textTheme.bodySmall,
+              ),
+              if (_isMobile) ...[
+                const SizedBox(height: 16),
+                FilledButton.tonal(
+                  onPressed: () async {
+                    await openAppSettings();
+                    if (!mounted) return;
+                    await _cameraController?.dispose();
+                    setState(() => _cameraController = null);
+                    await _initCamera();
+                  },
+                  child: const Text('Buka pengaturan'),
+                ),
+              ],
+            ],
+          ),
+        ),
+      );
+    }
+    if (!_isMobile) {
+      return Container(
+        decoration: BoxDecoration(
+          gradient: LinearGradient(
+            begin: Alignment.topLeft,
+            end: Alignment.bottomRight,
+            colors: [
+              Theme.of(context).colorScheme.surfaceContainerHighest,
+              Theme.of(context).colorScheme.surfaceContainerHigh,
+            ],
+          ),
+        ),
+        child: Column(
+          mainAxisAlignment: MainAxisAlignment.center,
+          children: [
+            Icon(
+              Icons.videocam_outlined,
+              size: 64,
+              color: Theme.of(context).colorScheme.outline,
+            ),
+            const SizedBox(height: 12),
+            Text(
+              'Preview kamera (demo)',
+              style: Theme.of(context).textTheme.titleSmall?.copyWith(
+                    color: Theme.of(context).colorScheme.onSurfaceVariant,
+                  ),
+            ),
+            const SizedBox(height: 8),
+            Text(
+              'Kamera diaktifkan di Android & iOS.',
+              textAlign: TextAlign.center,
+              style: Theme.of(context).textTheme.bodySmall?.copyWith(
+                    color: Theme.of(context).colorScheme.outline,
+                  ),
+            ),
+          ],
+        ),
+      );
+    }
+    final c = _cameraController;
+    if (c != null && c.value.isInitialized) {
+      return CameraPreview(c);
+    }
+    return ColoredBox(
+      color: Theme.of(context).colorScheme.surfaceContainerHighest,
+      child: const Center(child: CircularProgressIndicator()),
     );
   }
 

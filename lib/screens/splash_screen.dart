@@ -1,5 +1,7 @@
+import 'package:flutter/foundation.dart' show defaultTargetPlatform, kIsWeb, TargetPlatform;
 import 'package:flutter/material.dart';
 import 'package:go_router/go_router.dart';
+import 'package:permission_handler/permission_handler.dart';
 
 import '../widgets/sprintify_logo.dart';
 
@@ -14,10 +16,31 @@ class _SplashScreenState extends State<SplashScreen> {
   @override
   void initState() {
     super.initState();
-    Future<void>.delayed(const Duration(milliseconds: 1800), () {
-      if (!mounted) return;
-      context.go('/login');
-    });
+    _bootstrap();
+  }
+
+  Future<void> _bootstrap() async {
+    await Future.wait<void>([
+      _requestMobileCameraPermissions(),
+      Future<void>.delayed(const Duration(milliseconds: 1800)),
+    ]);
+    if (!mounted) return;
+    context.go('/login');
+  }
+
+  /// Meminta izin kamera (dan mikrofon untuk rekaman video) di awal, pada Android & iOS.
+  Future<void> _requestMobileCameraPermissions() async {
+    // Di `flutter test`, plugin izin tidak terhubung ke native — lewati agar tidak menggantung.
+    if (WidgetsBinding.instance.runtimeType.toString().contains('TestWidgetsFlutterBinding')) {
+      return;
+    }
+    if (kIsWeb) return;
+    if (defaultTargetPlatform != TargetPlatform.android &&
+        defaultTargetPlatform != TargetPlatform.iOS) {
+      return;
+    }
+    await Permission.camera.request();
+    await Permission.microphone.request();
   }
 
   @override

@@ -5,6 +5,7 @@ import 'app.dart';
 import 'providers/sprintify_state.dart';
 
 void main() {
+  WidgetsFlutterBinding.ensureInitialized();
   runApp(
     ChangeNotifierProvider<SprintifyState>(
       create: (_) => SprintifyState(),
