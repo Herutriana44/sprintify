@@ -6,6 +6,7 @@ import 'package:flutter/material.dart';
 import 'package:go_router/go_router.dart';
 import 'package:permission_handler/permission_handler.dart';
 import 'package:provider/provider.dart';
+import 'package:google_mlkit_pose_detection/google_mlkit_pose_detection.dart';
 
 import '../models/test_mode.dart';
 import '../providers/sprintify_state.dart';
@@ -25,6 +26,10 @@ class _RecordingScreenState extends State<RecordingScreen> {
   CameraController? _cameraController;
   bool _cameraInitializing = false;
   String? _cameraError;
+  
+  final PoseDetector _poseDetector = PoseDetector(options: PoseDetectorOptions());
+  bool _isBusy = false;
+  Pose? _detectedPose; // Hasil dari deteksi pose
 
   bool get _isMobile =>
       !kIsWeb &&
@@ -86,6 +91,14 @@ class _RecordingScreenState extends State<RecordingScreen> {
         await controller.dispose();
         return;
       }
+      
+      controller.startImageStream((CameraImage image) {
+        if (!_isBusy) {
+          _isBusy = true;
+          _processCameraImage(image);
+        }
+      });
+      
       setState(() {
         _cameraController = controller;
         _cameraInitializing = false;
@@ -104,7 +117,46 @@ class _RecordingScreenState extends State<RecordingScreen> {
   void dispose() {
     _timer?.cancel();
     _cameraController?.dispose();
+    _poseDetector.close();
     super.dispose();
+  }
+
+  Future<void> _processCameraImage(CameraImage image) async {
+    final inputImage = _inputImageFromCameraImage(image);
+    if (inputImage == null) {
+      _isBusy = false;
+      return;
+    }
+    try {
+      final List<Pose> poses = await _poseDetector.processImage(inputImage);
+      if (mounted) {
+        setState(() {
+          _detectedPose = poses.isNotEmpty ? poses.first : null; // Hasil deteksi pose
+        });
+      }
+    } catch (e) {
+      debugPrint('Error processing image: $e');
+    }
+    _isBusy = false;
+  }
+
+  InputImage? _inputImageFromCameraImage(CameraImage image) {
+    final camera = _cameraController!.description;
+    final sensorOrientation = camera.sensorOrientation;
+    final inputImageFormat = InputImageFormatValue.fromRawValue(image.format.raw);
+
+    if (inputImageFormat == null) return null;
+
+    final plane = image.planes.first;
+    return InputImage.fromBytes(
+      bytes: plane.bytes,
+      metadata: InputImageMetadata(
+        size: Size(image.width.toDouble(), image.height.toDouble()),
+        rotation: InputImageRotationValue.fromRawValue(sensorOrientation) ?? InputImageRotation.rotation0deg,
+        format: inputImageFormat,
+        bytesPerRow: plane.bytesPerRow,
+      ),
+    );
   }
 
   Future<void> _toggle() async {
@@ -376,7 +428,16 @@ class _RecordingScreenState extends State<RecordingScreen> {
     }
     final c = _cameraController;
     if (c != null && c.value.isInitialized) {
-      return CameraPreview(c);
+      return Stack(
+        fit: StackFit.expand,
+        children: [
+          CameraPreview(c),
+          if (_detectedPose != null)
+            CustomPaint(
+              painter: PosePainter(_detectedPose!),
+            ),
+        ],
+      );
     }
     return ColoredBox(
       color: Theme.of(context).colorScheme.surfaceContainerHighest,
@@ -389,4 +450,28 @@ class _RecordingScreenState extends State<RecordingScreen> {
     final r = s % 60;
     return '${m.toString().padLeft(2, '0')}:${r.toString().padLeft(2, '0')}';
   }
+}
+
+class PosePainter extends CustomPainter {
+  final Pose pose; // Hasil deteksi pose
+
+  PosePainter(this.pose);
+
+  @override
+  void paint(Canvas canvas, Size size) {
+    final paint = Paint()
+      ..color = Colors.green
+      ..strokeWidth = 4.0;
+
+    for (final landmark in pose.landmarks.values) { // Hasil deteksi pose
+      canvas.drawCircle(
+        Offset(landmark.x * size.width / 1000, landmark.y * size.height / 1000),
+        5.0,
+        paint,
+      );
+    }
+  }
+
+  @override
+  bool shouldRepaint(PosePainter oldDelegate) => true;
 }
