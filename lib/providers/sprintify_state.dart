@@ -19,7 +19,6 @@ class SprintifyState extends ChangeNotifier {
   RunResult? _lastRunResult;
   Athlete? _selectedAthlete;
   TestMode _testMode = TestMode.videoOnly;
-  bool _sensorConnected = true;
 
   List<Athlete> get athletes => List.unmodifiable(_athletes);
   List<RunResult> get history => List.unmodifiable(_history);
@@ -27,7 +26,6 @@ class SprintifyState extends ChangeNotifier {
   RunResult? get lastRunResult => _lastRunResult;
   Athlete? get selectedAthlete => _selectedAthlete;
   TestMode get testMode => _testMode;
-  bool get sensorConnected => _sensorConnected;
 
   void setSelectedAthlete(Athlete? athlete) {
     _selectedAthlete = athlete;
@@ -36,11 +34,6 @@ class SprintifyState extends ChangeNotifier {
 
   void setTestMode(TestMode mode) {
     _testMode = mode;
-    notifyListeners();
-  }
-
-  void setSensorConnected(bool value) {
-    _sensorConnected = value;
     notifyListeners();
   }
 

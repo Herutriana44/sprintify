@@ -181,29 +181,6 @@ class _RecordingScreenState extends State<RecordingScreen> {
     return Scaffold(
       appBar: AppBar(
         title: const Text('Rekaman'),
-        actions: [
-          Padding(
-            padding: const EdgeInsets.only(right: 12),
-            child: Center(
-              child: Row(
-                children: [
-                  Icon(
-                    state.sensorConnected ? Icons.sensors : Icons.sensors_off,
-                    size: 20,
-                    color: state.sensorConnected
-                        ? Theme.of(context).colorScheme.primary
-                        : Theme.of(context).colorScheme.error,
-                  ),
-                  const SizedBox(width: 6),
-                  Text(
-                    state.sensorConnected ? 'Sensor' : 'Off',
-                    style: Theme.of(context).textTheme.labelMedium,
-                  ),
-                ],
-              ),
-            ),
-          ),
-        ],
       ),
       body: SafeArea(
         child: Column(
@@ -279,11 +256,6 @@ class _RecordingScreenState extends State<RecordingScreen> {
                   ),
                 ),
               ),
-            ),
-            SwitchListTile(
-              title: const Text('Sensor IoT terhubung (mock)'),
-              value: state.sensorConnected,
-              onChanged: (v) => context.read<SprintifyState>().setSensorConnected(v),
             ),
             Padding(
               padding: const EdgeInsets.fromLTRB(20, 0, 20, 12),

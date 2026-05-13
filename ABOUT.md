@@ -3,7 +3,7 @@
 # Deskripsi
 Aplikasi yang dikembangkan merupakan sistem evaluasi kecepatan lari 60 meter berbasis mobile yang terintegrasi dengan perekaman video, analisis computer vision, serta sistem pendukung keputusan untuk memberikan penilaian dan rekomendasi latihan. Pengguna memulai dari halaman awal (splash screen) yang menampilkan identitas aplikasi, kemudian masuk melalui halaman login untuk mengakses sistem. Setelah berhasil masuk, pengguna diarahkan ke dashboard yang berfungsi sebagai pusat navigasi utama, menampilkan ringkasan aktivitas serta akses cepat untuk memulai tes lari atau melihat hasil sebelumnya. Pengguna terlebih dahulu mengelola data atlet atau siswa melalui halaman khusus yang menyediakan fitur penambahan, pengeditan, dan penyimpanan data sebagai subjek pengujian.
 
-Sebelum melakukan pengambilan data, pengguna akan melalui halaman persiapan tes yang berisi pemilihan atlet serta pengaturan metode pengujian, baik menggunakan perekaman video saja maupun dikombinasikan dengan sensor IoT. Selanjutnya, proses inti dilakukan pada halaman recording, di mana aplikasi merekam aktivitas lari menggunakan kamera perangkat secara langsung. Video yang dihasilkan kemudian dikirim ke sistem backend untuk diproses. Selama proses analisis berlangsung, pengguna akan melihat halaman processing yang menampilkan status pemrosesan data secara real-time hingga hasil siap ditampilkan.
+Sebelum melakukan pengambilan data, pengguna akan melalui halaman persiapan tes yang berisi pemilihan atlet serta pengaturan metode pengujian menggunakan perekaman video. Selanjutnya, proses inti dilakukan pada halaman recording, di mana aplikasi merekam aktivitas lari menggunakan kamera perangkat secara langsung. Video yang dihasilkan kemudian dikirim ke sistem backend untuk diproses. Selama proses analisis berlangsung, pengguna akan melihat halaman processing yang menampilkan status pemrosesan data secara real-time hingga hasil siap ditampilkan.
 
 Hasil utama ditampilkan pada halaman hasil lari yang menyajikan informasi waktu tempuh serta kategori performa berdasarkan parameter tertentu. Untuk analisis yang lebih mendalam, pengguna dapat mengakses halaman analisis detail yang menampilkan hasil pengolahan computer vision, seperti momen start dan finish, serta indikator teknis lainnya yang relevan. Berdasarkan data tersebut, sistem kemudian memberikan rekomendasi pada halaman khusus yang memanfaatkan metode sistem pendukung keputusan untuk menyarankan perbaikan atau latihan yang perlu dilakukan. Dengan alur yang terstruktur ini, aplikasi tidak hanya berfungsi sebagai alat ukur kecepatan, tetapi juga sebagai sistem evaluasi dan pendukung peningkatan performa lari secara komprehensif.
 
@@ -53,7 +53,6 @@ Isi:
 Pilih siswa
 Pilih mode:
 Video saja
-Video + IoT
 Instruksi:
 posisi kamera
 jarak 60m
@@ -65,9 +64,6 @@ Fitur:
 
 Record video
 Timer (opsional)
-Indikator:
-recording aktif
-sensor terhubung / tidak
 
 Output:
 
