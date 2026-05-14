@@ -24,6 +24,8 @@ class _RecordingScreenState extends State<RecordingScreen> {
   Timer? _timer;
 
   CameraController? _cameraController;
+  List<CameraDescription> _cameras = [];
+  int _selectedCameraIndex = 0;
   bool _cameraInitializing = false;
   String? _cameraError;
   
@@ -47,7 +49,7 @@ class _RecordingScreenState extends State<RecordingScreen> {
     }
   }
 
-  Future<void> _initCamera() async {
+  Future<void> _initCamera({int? cameraIndex}) async {
     setState(() {
       _cameraInitializing = true;
       _cameraError = null;
@@ -64,8 +66,10 @@ class _RecordingScreenState extends State<RecordingScreen> {
       return;
     }
     try {
-      final cameras = await availableCameras();
-      if (cameras.isEmpty) {
+      if (_cameras.isEmpty) {
+        _cameras = await availableCameras();
+      }
+      if (_cameras.isEmpty) {
         if (mounted) {
           setState(() {
             _cameraInitializing = false;
@@ -74,13 +78,10 @@ class _RecordingScreenState extends State<RecordingScreen> {
         }
         return;
       }
-      CameraDescription selected = cameras.first;
-      for (final c in cameras) {
-        if (c.lensDirection == CameraLensDirection.back) {
-          selected = c;
-          break;
-        }
-      }
+      
+      _selectedCameraIndex = cameraIndex ?? 0;
+      final selected = _cameras[_selectedCameraIndex];
+
       final controller = CameraController(
         selected,
         ResolutionPreset.medium,
@@ -111,6 +112,16 @@ class _RecordingScreenState extends State<RecordingScreen> {
         });
       }
     }
+  }
+
+  Future<void> _switchCamera() async {
+    if (_cameraController != null) {
+      await _cameraController!.dispose();
+      setState(() => _cameraController = null);
+    }
+    
+    final newIndex = (_selectedCameraIndex + 1) % _cameras.length;
+    await _initCamera(cameraIndex: newIndex);
   }
 
   @override
@@ -432,6 +443,18 @@ class _RecordingScreenState extends State<RecordingScreen> {
         fit: StackFit.expand,
         children: [
           CameraPreview(c),
+          if (_cameras.length > 1)
+            Positioned(
+              top: 12,
+              right: 12,
+              child: IconButton(
+                onPressed: _switchCamera,
+                icon: const Icon(Icons.flip_camera_ios, color: Colors.white),
+                style: IconButton.styleFrom(
+                  backgroundColor: Colors.black45,
+                ),
+              ),
+            ),
           if (_detectedPose != null)
             CustomPaint(
               painter: PosePainter(_detectedPose!),
