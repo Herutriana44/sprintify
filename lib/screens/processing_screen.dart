@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:go_router/go_router.dart';
 import 'package:provider/provider.dart';
+import 'package:sprintify/services/analysis/gemini_service.dart';
 
 import '../providers/sprintify_state.dart';
 
@@ -14,12 +15,13 @@ class ProcessingScreen extends StatefulWidget {
 class _ProcessingScreenState extends State<ProcessingScreen>
     with SingleTickerProviderStateMixin {
   late final AnimationController _controller;
+  final GeminiService _geminiService = GeminiService();
   var _step = 0;
   final _messages = const [
-    'Mengunggah cuplikan…',
-    'Computer vision: mendeteksi start & finish…',
-    'Menghitung waktu tempuh…',
-    'Scoring & kategori performa…',
+    'Mengunggah data pose...',
+    'Analisis posisi tubuh...',
+    'Evaluasi AI Gemini...',
+    'Menyusun rekomendasi...',
   ];
 
   @override
@@ -27,24 +29,34 @@ class _ProcessingScreenState extends State<ProcessingScreen>
     super.initState();
     _controller = AnimationController(
       vsync: this,
-      duration: const Duration(milliseconds: 4200),
+      duration: const Duration(milliseconds: 5000),
     )..forward();
 
-    Future<void>.delayed(const Duration(milliseconds: 900), () {
-      if (mounted) setState(() => _step = 1);
-    });
-    Future<void>.delayed(const Duration(milliseconds: 2000), () {
-      if (mounted) setState(() => _step = 2);
-    });
-    Future<void>.delayed(const Duration(milliseconds: 3200), () {
-      if (mounted) setState(() => _step = 3);
-    });
-    Future<void>.delayed(const Duration(milliseconds: 4500), () {
-      if (!mounted) return;
-      context.read<SprintifyState>().completeRunWithSimulatedResult();
-      if (!mounted) return;
-      context.go('/result');
-    });
+    _runAnalysis();
+  }
+
+  Future<void> _runAnalysis() async {
+    final state = context.read<SprintifyState>();
+
+    // Simulasi step UI
+    await Future<void>.delayed(const Duration(milliseconds: 900));
+    if (!mounted) return; setState(() => _step = 1);
+
+    // Analisis dasar (bisa ambil data dari state yang diset di record)
+    await Future<void>.delayed(const Duration(milliseconds: 1000));
+    if (!mounted) return; setState(() => _step = 2);
+
+    // Panggil Gemini (contoh prompt)
+    final prompt = 'Berikan penilaian singkat dan rekomendasi untuk pelari sprint berdasarkan skor pose: Bersedia 85, Lari 78. Berikan dalam bahasa Indonesia.';
+    final result = await _geminiService.getAnalysis(prompt);
+
+    await Future<void>.delayed(const Duration(milliseconds: 1000));
+    if (!mounted) return; setState(() => _step = 3);
+
+    // Selesai
+    state.completeRunWithResult(result);
+    if (!mounted) return;
+    context.go('/result');
   }
 
   @override
@@ -52,6 +64,7 @@ class _ProcessingScreenState extends State<ProcessingScreen>
     _controller.dispose();
     super.dispose();
   }
+// ...
 
   @override
   Widget build(BuildContext context) {

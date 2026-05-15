@@ -29,6 +29,12 @@ jobs:
             ${{ runner.os }}-pub-
 
       - run: flutter pub get
+      - name: Create .env file
+        run: |
+          echo "GEMINI_API_KEY=${{ secrets.GEMINI_API_KEY }}" >> .env
+          echo "GEMINI_MODEL_ID=${{ secrets.GEMINI_MODEL_ID }}" >> .env
+          echo "FIREBASE_PROJECT_ID=${{ secrets.FIREBASE_PROJECT_ID }}" >> .env
+          echo "FIREBASE_API_KEY=${{ secrets.FIREBASE_API_KEY }}" >> .env
       - run: flutter build apk
 
       - name: Rename APK

@@ -8,6 +8,7 @@ import 'package:go_router/go_router.dart';
 import 'package:permission_handler/permission_handler.dart';
 import 'package:provider/provider.dart';
 import 'package:google_mlkit_pose_detection/google_mlkit_pose_detection.dart';
+import 'package:sprintify/services/analysis/analysis_service.dart';
 
 import '../models/test_mode.dart';
 import '../providers/sprintify_state.dart';
@@ -22,6 +23,10 @@ class RecordingScreen extends StatefulWidget {
 }
 
 class _RecordingScreenState extends State<RecordingScreen> {
+  final AnalysisService _analysisService = AnalysisService();
+  final List<double> _bersediaScores = [];
+  final List<double> _lariScores = [];
+
   bool _recording = false;
   int _seconds = 0;
   Timer? _timer;
@@ -74,6 +79,7 @@ class _RecordingScreenState extends State<RecordingScreen> {
   @override
   void initState() {
     super.initState();
+    _analysisService.loadReferencePoses();
     if (_isMobile) {
       _initCamera();
     }
@@ -185,6 +191,16 @@ class _RecordingScreenState extends State<RecordingScreen> {
             _addLog('OK: Pose ditemukan! (Berhenti di ${_poseFoundTime}s)');
           } else if (_recording) {
             _startDetectionTimer();
+          }
+        }
+
+        if (isPersonDetected) {
+          final bersediaScore = _analysisService.calculatePoseScore(poses.first, 'bersedia');
+          final lariScore = _analysisService.calculatePoseScore(poses.first, 'berlari');
+          
+          if (_recording) {
+            _bersediaScores.add(bersediaScore);
+            _lariScores.add(lariScore);
           }
         }
 
