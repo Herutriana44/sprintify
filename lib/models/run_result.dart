@@ -11,6 +11,7 @@ class RunResult {
     required this.stepCount,
     required this.avgSpeedKmh,
     required this.recordedAt,
+    this.analysisNote,
   });
 
   final String athleteId;
@@ -22,4 +23,5 @@ class RunResult {
   final int stepCount;
   final double avgSpeedKmh;
   final DateTime recordedAt;
+  final String? analysisNote;
 }
