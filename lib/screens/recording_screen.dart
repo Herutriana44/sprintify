@@ -36,6 +36,8 @@ class _RecordingScreenState extends State<RecordingScreen> {
   Size? _imageSize; // Ukuran gambar untuk scaling
   int _detectionTimerSeconds = 0;
   Timer? _detectionTimer;
+  bool _isPoseDetected = false;
+  int _poseFoundTime = 0;
 
   final List<String> _logHistory = [];
   final ScrollController _logScrollController = ScrollController();
