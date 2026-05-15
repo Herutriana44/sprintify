@@ -20,17 +20,23 @@ class RecordingScreen extends StatefulWidget {
 }
 
 class _RecordingScreenState extends State<RecordingScreen> {
+import '../services/pose/pose_manager.dart';
+import '../services/camera/camera_manager.dart';
+
+class _RecordingScreenState extends State<RecordingScreen> {
   bool _recording = false;
   int _seconds = 0;
   Timer? _timer;
 
-  CameraController? _cameraController;
+  final CameraManager _cameraManager = CameraManager();
+  final PoseManager _poseManager = PoseManager();
+
+  CameraController? get _cameraController => _cameraManager.controller;
   List<CameraDescription> _cameras = [];
   int _selectedCameraIndex = 0;
   bool _cameraInitializing = false;
   String? _cameraError;
   
-  final PoseDetector _poseDetector = PoseDetector(options: PoseDetectorOptions());
   bool _isBusy = false;
   Pose? _detectedPose; // Hasil dari deteksi pose
   Size? _imageSize; // Ukuran gambar untuk scaling
@@ -225,31 +231,6 @@ class _RecordingScreenState extends State<RecordingScreen> {
       _addLog('Err: $e');
     }
     _isBusy = false;
-  }
-
-  InputImage? _inputImageFromCameraImage(CameraImage image) {
-    final camera = _cameraController?.description;
-    if (camera == null) return null;
-
-    final inputImageFormat = InputImageFormatValue.fromRawValue(image.format.raw);
-    if (inputImageFormat == null ||
-        (Platform.isAndroid && inputImageFormat != InputImageFormat.nv21) ||
-        (Platform.isIOS && inputImageFormat != InputImageFormat.bgra8888)) {
-      return null;
-    }
-
-    if (image.planes.length != 1) return null;
-    final plane = image.planes.first;
-
-    return InputImage.fromBytes(
-      bytes: plane.bytes,
-      metadata: InputImageMetadata(
-        size: Size(image.width.toDouble(), image.height.toDouble()),
-        rotation: _rotationFromSensorOrientation(camera.sensorOrientation),
-        format: inputImageFormat,
-        bytesPerRow: plane.bytesPerRow,
-      ),
-    );
   }
 
   InputImageRotation _rotationFromSensorOrientation(int sensorOrientation) {
