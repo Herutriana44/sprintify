@@ -160,6 +160,21 @@ class _RecordingScreenState extends State<RecordingScreen> {
     super.dispose();
   }
 
+  void _startDetectionTimer() {
+    _detectionTimerSeconds = 0;
+    _detectionTimer?.cancel();
+    _detectionTimer = Timer.periodic(const Duration(seconds: 1), (timer) {
+      if (!_recording) {
+        timer.cancel();
+        return;
+      }
+      _detectionTimerSeconds++;
+      if (_detectionTimerSeconds % 5 == 0) {
+        _addLog('Mencari pose... (${_detectionTimerSeconds}s)');
+      }
+    });
+  }
+
   Future<void> _processCameraImage(CameraImage image) async {
     final inputImage = _inputImageFromCameraImage(image);
     if (inputImage == null) {
