@@ -187,33 +187,42 @@ class _RecordingScreenState extends State<RecordingScreen> {
   }
 
   Future<void> _processCameraImage(CameraImage image) async {
-    final inputImage = _inputImageFromCameraImage(image);
+    final inputImage = _cameraManager.inputImageFromCameraImage(image);
     if (inputImage == null) {
       _isBusy = false;
       return;
     }
     try {
-      final List<Pose> poses = await _poseDetector.processImage(inputImage);
+      final List<Pose> poses = await _poseManager.processImage(inputImage);
       if (mounted) {
         final sensorOrientation = _cameraController?.description.sensorOrientation ?? 0;
         final bool isPersonDetected = poses.isNotEmpty;
 
-        // Logika Timer Deteksi
         if (isPersonDetected) {
+          if (_detectionTimer == null && !_isPoseDetected) {
+            _detectionTimerSeconds = 0;
+            _addLog('Orang terdeteksi! Timer dimulai...');
+            _detectionTimer = Timer.periodic(const Duration(seconds: 1), (timer) {
+              setState(() {
+                _detectionTimerSeconds++;
+              });
+              
+              if (_detectionTimerSeconds >= 5) {
+                _addLog('Deteksi selesai setelah 5 detik.');
+                _poseFoundTime = _detectionTimerSeconds;
+                _isPoseDetected = true;
+                timer.cancel();
+                _detectionTimer = null;
+              }
+            });
+          }
+        } else {
           if (_detectionTimer != null) {
             _detectionTimer?.cancel();
             _detectionTimer = null;
-            _addLog('Deteksi Berhenti: Orang ditemukan.');
+            _detectionTimerSeconds = 0;
+            _addLog('Orang hilang, timer reset.');
           }
-        } else if (_recording && _detectionTimer == null) {
-          _detectionTimerSeconds = 0;
-          _detectionTimer = Timer.periodic(const Duration(seconds: 1), (timer) {
-            _detectionTimerSeconds++;
-            if (_detectionTimerSeconds >= 5) {
-               _addLog('Peringatan: Orang tidak ditemukan selama 5 detik!');
-            }
-          });
-          _addLog('Deteksi dimulai: Mencari orang...');
         }
 
         setState(() {
