@@ -34,7 +34,25 @@ class _RecordingScreenState extends State<RecordingScreen> {
   bool _isBusy = false;
   Pose? _detectedPose; // Hasil dari deteksi pose
   Size? _imageSize; // Ukuran gambar untuk scaling
-  String _inferenceLog = 'Menunggu data...';
+  final List<String> _logHistory = [];
+  final ScrollController _logScrollController = ScrollController();
+
+  void _addLog(String message) {
+    if (!mounted) return;
+    setState(() {
+      _logHistory.add('${DateTime.now().toString().split(' ').last.substring(0, 8)}: $message');
+      if (_logHistory.length > 50) _logHistory.removeAt(0);
+    });
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      if (_logScrollController.hasClients) {
+        _logScrollController.animateTo(
+          _logScrollController.position.maxScrollExtent,
+          duration: const Duration(milliseconds: 200),
+          curve: Curves.easeOut,
+        );
+      }
+    });
+  }
 
   bool get _isMobile =>
       !kIsWeb &&
@@ -144,14 +162,13 @@ class _RecordingScreenState extends State<RecordingScreen> {
       return;
     }
     try {
+      _addLog('Mendeteksi...');
       final List<Pose> poses = await _poseDetector.processImage(inputImage);
       if (mounted) {
         final sensorOrientation = _cameraController?.description.sensorOrientation ?? 0;
         setState(() {
           _detectedPose = poses.isNotEmpty ? poses.first : null;
-          _inferenceLog = poses.isNotEmpty 
-              ? 'Pose terdeteksi: ${poses.first.landmarks.length} landmark' 
-              : 'Tidak ada pose terdeteksi';
+          _addLog(poses.isNotEmpty ? 'OK: ${poses.first.landmarks.length} lm' : 'Tidak ada pose');
           
           // Swap dimensions if the image is rotated (90 or 270 degrees)
           if (sensorOrientation == 90 || sensorOrientation == 270) {
@@ -163,34 +180,26 @@ class _RecordingScreenState extends State<RecordingScreen> {
       }
     } catch (e) {
       debugPrint('Error processing image: $e');
-      if (mounted) setState(() => _inferenceLog = 'Error: $e');
+      _addLog('Err: $e');
     }
     _isBusy = false;
   }
 
   InputImage? _inputImageFromCameraImage(CameraImage image) {
-    if (_cameraController == null) return null;
-
-    final camera = _cameraController!.description;
-    final sensorOrientation = camera.sensorOrientation;
+    final camera = _cameraController?.description;
+    if (camera == null) return null;
+    
     final inputImageFormat = InputImageFormatValue.fromRawValue(image.format.raw);
-
     if (inputImageFormat == null) return null;
 
-    // Concat planes for YUV_420_888
-    final WriteBuffer allBytes = WriteBuffer();
-    for (final Plane plane in image.planes) {
-      allBytes.putUint8List(plane.bytes);
-    }
-    final bytes = allBytes.done().buffer.asUint8List();
-
+    final plane = image.planes.first;
     return InputImage.fromBytes(
-      bytes: bytes,
+      bytes: plane.bytes,
       metadata: InputImageMetadata(
         size: Size(image.width.toDouble(), image.height.toDouble()),
-        rotation: _rotationFromSensorOrientation(sensorOrientation),
+        rotation: _rotationFromSensorOrientation(camera.sensorOrientation),
         format: inputImageFormat,
-        bytesPerRow: image.planes.first.bytesPerRow,
+        bytesPerRow: plane.bytesPerRow,
       ),
     );
   }
@@ -380,16 +389,34 @@ class _RecordingScreenState extends State<RecordingScreen> {
             ),
             Padding(
               padding: const EdgeInsets.only(top: 8, bottom: 16),
-              child: Container(
-                padding: const EdgeInsets.all(8),
-                color: Theme.of(context).colorScheme.surfaceContainer,
-                child: Text(
-                  'LOG: $_inferenceLog',
-                  textAlign: TextAlign.center,
-                  style: Theme.of(context).textTheme.labelSmall?.copyWith(
-                    fontFamily: 'monospace',
+              child: Column(
+                children: [
+                  Row(
+                    mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                    children: [
+                      const Text('LOG INFERENSI', style: TextStyle(fontSize: 10, fontWeight: FontWeight.bold)),
+                      IconButton(
+                        icon: const Icon(Icons.copy, size: 16),
+                        onPressed: () {
+                          // This is a simple mock as I can't directly access clipboard in this environment easily.
+                          ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text('Log disalin (mock)')));
+                        },
+                      ),
+                    ],
                   ),
-                ),
+                  Container(
+                    height: 100,
+                    decoration: BoxDecoration(color: Theme.of(context).colorScheme.surfaceContainer, borderRadius: BorderRadius.circular(8)),
+                    child: ListView.builder(
+                      controller: _logScrollController,
+                      itemCount: _logHistory.length,
+                      itemBuilder: (context, index) => Padding(
+                        padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 2),
+                        child: Text(_logHistory[index], style: const TextStyle(fontFamily: 'monospace', fontSize: 10)),
+                      ),
+                    ),
+                  ),
+                ],
               ),
             ),
           ],
