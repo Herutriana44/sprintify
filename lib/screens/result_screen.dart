@@ -1,5 +1,6 @@
 import 'package:fl_chart/fl_chart.dart';
 import 'package:flutter/material.dart';
+import 'package:flutter/services.dart';
 import 'package:go_router/go_router.dart';
 import 'package:provider/provider.dart';
 
@@ -161,6 +162,40 @@ class ResultScreen extends StatelessWidget {
             TextButton(
               onPressed: () => context.go('/dashboard'),
               child: const Text('Kembali ke beranda'),
+            ),
+            const SizedBox(height: 24),
+            Row(
+              mainAxisAlignment: MainAxisAlignment.spaceBetween,
+              children: [
+                Text(
+                  'Log Hasil (JSON)',
+                  style: Theme.of(context).textTheme.titleSmall,
+                ),
+                IconButton(
+                  icon: const Icon(Icons.copy),
+                  onPressed: () {
+                    final data = r.toString();
+                    Clipboard.setData(ClipboardData(text: data));
+                    ScaffoldMessenger.of(context).showSnackBar(
+                      const SnackBar(content: Text('Log berhasil disalin')),
+                    );
+                  },
+                ),
+              ],
+            ),
+            Container(
+              height: 150,
+              padding: const EdgeInsets.all(12),
+              decoration: BoxDecoration(
+                color: Theme.of(context).colorScheme.surfaceContainer,
+                borderRadius: BorderRadius.circular(8),
+              ),
+              child: SingleChildScrollView(
+                child: Text(
+                  r.toString(),
+                  style: Theme.of(context).textTheme.bodySmall?.copyWith(fontFamily: 'monospace'),
+                ),
+              ),
             ),
           ],
         ),
