@@ -165,23 +165,42 @@ class _RecordingScreenState extends State<RecordingScreen> {
 
   InputImage? _inputImageFromCameraImage(CameraImage image) {
     if (_cameraController == null) return null;
-    
+
     final camera = _cameraController!.description;
     final sensorOrientation = camera.sensorOrientation;
     final inputImageFormat = InputImageFormatValue.fromRawValue(image.format.raw);
 
     if (inputImageFormat == null) return null;
 
-    final plane = image.planes.first;
+    // Concat planes for YUV_420_888
+    final WriteBuffer allBytes = WriteBuffer();
+    for (final Plane plane in image.planes) {
+      allBytes.putUint8List(plane.bytes);
+    }
+    final bytes = allBytes.done().buffer.asUint8List();
+
     return InputImage.fromBytes(
-      bytes: plane.bytes,
+      bytes: bytes,
       metadata: InputImageMetadata(
         size: Size(image.width.toDouble(), image.height.toDouble()),
-        rotation: InputImageRotationValue.fromRawValue(sensorOrientation) ?? InputImageRotation.rotation0deg,
+        rotation: _rotationFromSensorOrientation(sensorOrientation),
         format: inputImageFormat,
-        bytesPerRow: plane.bytesPerRow,
+        bytesPerRow: image.planes.first.bytesPerRow,
       ),
     );
+  }
+
+  InputImageRotation _rotationFromSensorOrientation(int sensorOrientation) {
+    switch (sensorOrientation) {
+      case 90:
+        return InputImageRotation.rotation90deg;
+      case 180:
+        return InputImageRotation.rotation180deg;
+      case 270:
+        return InputImageRotation.rotation270deg;
+      default:
+        return InputImageRotation.rotation0deg;
+    }
   }
 
   Future<void> _toggle() async {
