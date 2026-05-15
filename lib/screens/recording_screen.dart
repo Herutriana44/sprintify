@@ -188,18 +188,26 @@ class _RecordingScreenState extends State<RecordingScreen> {
   InputImage? _inputImageFromCameraImage(CameraImage image) {
     final camera = _cameraController?.description;
     if (camera == null) return null;
-    
+
     final inputImageFormat = InputImageFormatValue.fromRawValue(image.format.raw);
     if (inputImageFormat == null) return null;
 
-    final plane = image.planes.first;
+    // ML Kit requires a single NV21 or YUV_420_888 byte array.
+    // For YUV_420_888, planes are: 0: Y, 1: U, 2: V.
+    // We combine them into a single byte array.
+    final WriteBuffer allBytes = WriteBuffer();
+    for (final Plane plane in image.planes) {
+      allBytes.putUint8List(plane.bytes);
+    }
+    final bytes = allBytes.done().buffer.asUint8List();
+
     return InputImage.fromBytes(
-      bytes: plane.bytes,
+      bytes: bytes,
       metadata: InputImageMetadata(
         size: Size(image.width.toDouble(), image.height.toDouble()),
         rotation: _rotationFromSensorOrientation(camera.sensorOrientation),
         format: inputImageFormat,
-        bytesPerRow: plane.bytesPerRow,
+        bytesPerRow: image.planes.first.bytesPerRow,
       ),
     );
   }
