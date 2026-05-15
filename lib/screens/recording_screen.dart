@@ -107,20 +107,22 @@ class _RecordingScreenState extends State<RecordingScreen> {
         selected,
         ResolutionPreset.medium,
         enableAudio: true,
-        imageFormatGroup: Platform.isAndroid ? ImageFormatGroup.yuv420 : ImageFormatGroup.bgra8888,
+        imageFormatGroup: Platform.isAndroid
+            ? ImageFormatGroup.nv21
+            : ImageFormatGroup.bgra8888,
       );
       await controller.initialize();
       if (!mounted) {
         await controller.dispose();
         return;
       }
-      
+
       setState(() {
         _cameraController = controller;
         _cameraInitializing = false;
       });
 
-      // Mulai stream gambar segera setelah inisialisasi agar pose detection langsung "on"
+      // Mulai stream gambar
       controller.startImageStream((CameraImage image) {
         if (!_isBusy) {
           _isBusy = true;
@@ -190,24 +192,22 @@ class _RecordingScreenState extends State<RecordingScreen> {
     if (camera == null) return null;
 
     final inputImageFormat = InputImageFormatValue.fromRawValue(image.format.raw);
-    if (inputImageFormat == null) return null;
-
-    // ML Kit requires a single NV21 or YUV_420_888 byte array.
-    // For YUV_420_888, planes are: 0: Y, 1: U, 2: V.
-    // We combine them into a single byte array.
-    final WriteBuffer allBytes = WriteBuffer();
-    for (final Plane plane in image.planes) {
-      allBytes.putUint8List(plane.bytes);
+    if (inputImageFormat == null ||
+        (Platform.isAndroid && inputImageFormat != InputImageFormat.nv21) ||
+        (Platform.isIOS && inputImageFormat != InputImageFormat.bgra8888)) {
+      return null;
     }
-    final bytes = allBytes.done().buffer.asUint8List();
+
+    if (image.planes.length != 1) return null;
+    final plane = image.planes.first;
 
     return InputImage.fromBytes(
-      bytes: bytes,
+      bytes: plane.bytes,
       metadata: InputImageMetadata(
         size: Size(image.width.toDouble(), image.height.toDouble()),
         rotation: _rotationFromSensorOrientation(camera.sensorOrientation),
         format: inputImageFormat,
-        bytesPerRow: image.planes.first.bytesPerRow,
+        bytesPerRow: plane.bytesPerRow,
       ),
     );
   }
