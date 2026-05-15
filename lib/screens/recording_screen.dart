@@ -34,6 +34,7 @@ class _RecordingScreenState extends State<RecordingScreen> {
   bool _isBusy = false;
   Pose? _detectedPose; // Hasil dari deteksi pose
   Size? _imageSize; // Ukuran gambar untuk scaling
+  String _inferenceLog = 'Menunggu data...';
 
   bool get _isMobile =>
       !kIsWeb &&
@@ -148,6 +149,9 @@ class _RecordingScreenState extends State<RecordingScreen> {
         final sensorOrientation = _cameraController?.description.sensorOrientation ?? 0;
         setState(() {
           _detectedPose = poses.isNotEmpty ? poses.first : null;
+          _inferenceLog = poses.isNotEmpty 
+              ? 'Pose terdeteksi: ${poses.first.landmarks.length} landmark' 
+              : 'Tidak ada pose terdeteksi';
           
           // Swap dimensions if the image is rotated (90 or 270 degrees)
           if (sensorOrientation == 90 || sensorOrientation == 270) {
@@ -159,6 +163,7 @@ class _RecordingScreenState extends State<RecordingScreen> {
       }
     } catch (e) {
       debugPrint('Error processing image: $e');
+      if (mounted) setState(() => _inferenceLog = 'Error: $e');
     }
     _isBusy = false;
   }
@@ -374,15 +379,17 @@ class _RecordingScreenState extends State<RecordingScreen> {
               ),
             ),
             Padding(
-              padding: const EdgeInsets.only(bottom: 16),
-              child: Text(
-                _isMobile && _cameraLive
-                    ? 'Preview kamera aktif. Video dapat dikirim ke backend pada produksi.'
-                    : 'Demo: tidak ada unggahan nyata.',
-                textAlign: TextAlign.center,
-                style: Theme.of(context).textTheme.labelSmall?.copyWith(
-                      color: Theme.of(context).colorScheme.outline,
-                    ),
+              padding: const EdgeInsets.only(top: 8, bottom: 16),
+              child: Container(
+                padding: const EdgeInsets.all(8),
+                color: Theme.of(context).colorScheme.surfaceContainer,
+                child: Text(
+                  'LOG: $_inferenceLog',
+                  textAlign: TextAlign.center,
+                  style: Theme.of(context).textTheme.labelSmall?.copyWith(
+                    fontFamily: 'monospace',
+                  ),
+                ),
               ),
             ),
           ],
