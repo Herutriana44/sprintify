@@ -34,6 +34,9 @@ class _RecordingScreenState extends State<RecordingScreen> {
   bool _isBusy = false;
   Pose? _detectedPose; // Hasil dari deteksi pose
   Size? _imageSize; // Ukuran gambar untuk scaling
+  int _detectionTimerSeconds = 0;
+  Timer? _detectionTimer;
+
   final List<String> _logHistory = [];
   final ScrollController _logScrollController = ScrollController();
 
@@ -164,15 +167,32 @@ class _RecordingScreenState extends State<RecordingScreen> {
       return;
     }
     try {
-      _addLog('Mendeteksi...');
       final List<Pose> poses = await _poseDetector.processImage(inputImage);
       if (mounted) {
         final sensorOrientation = _cameraController?.description.sensorOrientation ?? 0;
+        final bool isPersonDetected = poses.isNotEmpty;
+
+        // Logika Timer Deteksi
+        if (isPersonDetected) {
+          if (_detectionTimer != null) {
+            _detectionTimer?.cancel();
+            _detectionTimer = null;
+            _addLog('Deteksi Berhenti: Orang ditemukan.');
+          }
+        } else if (_recording && _detectionTimer == null) {
+          _detectionTimerSeconds = 0;
+          _detectionTimer = Timer.periodic(const Duration(seconds: 1), (timer) {
+            _detectionTimerSeconds++;
+            if (_detectionTimerSeconds >= 5) {
+               _addLog('Peringatan: Orang tidak ditemukan selama 5 detik!');
+            }
+          });
+          _addLog('Deteksi dimulai: Mencari orang...');
+        }
+
         setState(() {
-          _detectedPose = poses.isNotEmpty ? poses.first : null;
-          _addLog(poses.isNotEmpty ? 'OK: ${poses.first.landmarks.length} lm' : 'Tidak ada pose');
+          _detectedPose = isPersonDetected ? poses.first : null;
           
-          // Swap dimensions if the image is rotated (90 or 270 degrees)
           if (sensorOrientation == 90 || sensorOrientation == 270) {
             _imageSize = Size(image.height.toDouble(), image.width.toDouble());
           } else {
@@ -518,6 +538,7 @@ class _RecordingScreenState extends State<RecordingScreen> {
         fit: StackFit.expand,
         children: [
           CameraPreview(c),
+          CustomPaint(painter: DetectionAreaPainter()),
           if (_cameras.length > 1)
             Positioned(
               top: 12,
@@ -576,4 +597,23 @@ class PosePainter extends CustomPainter {
 
   @override
   bool shouldRepaint(PosePainter oldDelegate) => true;
+}
+
+class DetectionAreaPainter extends CustomPainter {
+  @override
+  void paint(Canvas canvas, Size size) {
+    final paint = Paint()
+      ..color = Colors.white.withValues(alpha: 0.5)
+      ..style = PaintingStyle.stroke
+      ..strokeWidth = 3.0;
+    
+    final rect = Rect.fromCenter(
+      center: Offset(size.width / 2, size.height / 2),
+      width: size.width * 0.6,
+      height: size.height * 0.6,
+    );
+    canvas.drawRect(rect, paint);
+  }
+  @override
+  bool shouldRepaint(covariant CustomPainter oldDelegate) => false;
 }
