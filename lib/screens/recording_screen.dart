@@ -246,7 +246,9 @@ class _RecordingScreenState extends State<RecordingScreen> {
           });
         });
       } else {
-        await c.stopVideoRecording();
+        if (c.value.isRecordingVideo) {
+          await c.stopVideoRecording();
+        }
         _timer?.cancel();
         _timer = null;
         if (!mounted) return;
@@ -328,7 +330,7 @@ class _RecordingScreenState extends State<RecordingScreen> {
               padding: const EdgeInsets.fromLTRB(20, 0, 20, 12),
               child: Row(
                 children: [
-                  Expanded(child: FilledButton.tonal(onPressed: _cameraInitializing ? null : _toggle, child: Text(_recording ? 'Jeda' : 'Mulai rekaman'))),
+                  Expanded(child: FilledButton.tonal(onPressed: _cameraInitializing ? null : _toggle, child: Text(_recording ? 'Berhenti' : 'Mulai rekaman'))),
                   const SizedBox(width: 12),
                   Expanded(child: FilledButton(onPressed: _finish, child: const Text('Selesai & analisis'))),
                 ],
