@@ -11,6 +11,8 @@ import 'package:google_mlkit_pose_detection/google_mlkit_pose_detection.dart';
 
 import '../models/test_mode.dart';
 import '../providers/sprintify_state.dart';
+import '../services/pose/pose_manager.dart';
+import '../services/camera/camera_manager.dart';
 
 class RecordingScreen extends StatefulWidget {
   const RecordingScreen({super.key});
@@ -18,10 +20,6 @@ class RecordingScreen extends StatefulWidget {
   @override
   State<RecordingScreen> createState() => _RecordingScreenState();
 }
-
-class _RecordingScreenState extends State<RecordingScreen> {
-import '../services/pose/pose_manager.dart';
-import '../services/camera/camera_manager.dart';
 
 class _RecordingScreenState extends State<RecordingScreen> {
   bool _recording = false;
@@ -92,7 +90,7 @@ class _RecordingScreenState extends State<RecordingScreen> {
       if (mounted) {
         setState(() {
           _cameraInitializing = false;
-          _cameraError = 'Izin kamera atau mikrofon belum diberikan. Aktifkan di pengaturan aplikasi.';
+          _cameraError = 'Izin kamera atau mikrofon belum diberikan.';
         });
       }
       return;
@@ -105,40 +103,23 @@ class _RecordingScreenState extends State<RecordingScreen> {
         if (mounted) {
           setState(() {
             _cameraInitializing = false;
-            _cameraError = 'Tidak ada kamera yang tersedia.';
+            _cameraError = 'Tidak ada kamera.';
           });
         }
         return;
       }
       
       _selectedCameraIndex = cameraIndex ?? 0;
-      final selected = _cameras[_selectedCameraIndex];
-
-      final controller = CameraController(
-        selected,
-        ResolutionPreset.medium,
-        enableAudio: true,
-        imageFormatGroup: Platform.isAndroid
-            ? ImageFormatGroup.nv21
-            : ImageFormatGroup.bgra8888,
-      );
-      await controller.initialize();
-      if (!mounted) {
-        await controller.dispose();
-        return;
-      }
-
-      setState(() {
-        _cameraController = controller;
-        _cameraInitializing = false;
-      });
-
-      // Mulai stream gambar
-      controller.startImageStream((CameraImage image) {
+      await _cameraManager.initialize(_cameras[_selectedCameraIndex], (image) {
         if (!_isBusy) {
           _isBusy = true;
           _processCameraImage(image);
         }
+      });
+      
+      if (!mounted) return;
+      setState(() {
+        _cameraInitializing = false;
       });
     } catch (e) {
       if (mounted) {
@@ -151,10 +132,8 @@ class _RecordingScreenState extends State<RecordingScreen> {
   }
 
   Future<void> _switchCamera() async {
-    if (_cameraController != null) {
-      await _cameraController!.dispose();
-      setState(() => _cameraController = null);
-    }
+    await _cameraManager.dispose();
+    setState(() {});
     
     final newIndex = (_selectedCameraIndex + 1) % _cameras.length;
     await _initCamera(cameraIndex: newIndex);
@@ -164,8 +143,8 @@ class _RecordingScreenState extends State<RecordingScreen> {
   void dispose() {
     _timer?.cancel();
     _detectionTimer?.cancel();
-    _cameraController?.dispose();
-    _poseDetector.close();
+    _cameraManager.dispose();
+    _poseManager.dispose();
     super.dispose();
   }
 
@@ -198,30 +177,14 @@ class _RecordingScreenState extends State<RecordingScreen> {
         final sensorOrientation = _cameraController?.description.sensorOrientation ?? 0;
         final bool isPersonDetected = poses.isNotEmpty;
 
-        if (isPersonDetected) {
-          if (_detectionTimer == null && !_isPoseDetected) {
-            _detectionTimerSeconds = 0;
-            _addLog('Orang terdeteksi! Timer dimulai...');
-            _detectionTimer = Timer.periodic(const Duration(seconds: 1), (timer) {
-              setState(() {
-                _detectionTimerSeconds++;
-              });
-              
-              if (_detectionTimerSeconds >= 5) {
-                _addLog('Deteksi selesai setelah 5 detik.');
-                _poseFoundTime = _detectionTimerSeconds;
-                _isPoseDetected = true;
-                timer.cancel();
-                _detectionTimer = null;
-              }
-            });
-          }
-        } else {
-          if (_detectionTimer != null) {
+        if (isPersonDetected != _isPoseDetected) {
+          _isPoseDetected = isPersonDetected;
+          if (_isPoseDetected) {
             _detectionTimer?.cancel();
-            _detectionTimer = null;
-            _detectionTimerSeconds = 0;
-            _addLog('Orang hilang, timer reset.');
+            _poseFoundTime = _detectionTimerSeconds;
+            _addLog('OK: Pose ditemukan! (Berhenti di ${_poseFoundTime}s)');
+          } else if (_recording) {
+            _startDetectionTimer();
           }
         }
 
@@ -240,19 +203,6 @@ class _RecordingScreenState extends State<RecordingScreen> {
       _addLog('Err: $e');
     }
     _isBusy = false;
-  }
-
-  InputImageRotation _rotationFromSensorOrientation(int sensorOrientation) {
-    switch (sensorOrientation) {
-      case 90:
-        return InputImageRotation.rotation90deg;
-      case 180:
-        return InputImageRotation.rotation180deg;
-      case 270:
-        return InputImageRotation.rotation270deg;
-      default:
-        return InputImageRotation.rotation0deg;
-    }
   }
 
   Future<void> _toggle() async {
@@ -328,32 +278,18 @@ class _RecordingScreenState extends State<RecordingScreen> {
     final athlete = state.selectedAthlete;
 
     return Scaffold(
-      appBar: AppBar(
-        title: const Text('Rekaman'),
-      ),
+      appBar: AppBar(title: const Text('Rekaman')),
       body: SafeArea(
         child: Column(
           crossAxisAlignment: CrossAxisAlignment.stretch,
           children: [
             Padding(
               padding: const EdgeInsets.fromLTRB(20, 8, 20, 0),
-              child: Text(
-                athlete?.name ?? '—',
-                style: Theme.of(context).textTheme.titleMedium?.copyWith(
-                      fontWeight: FontWeight.w600,
-                    ),
-                textAlign: TextAlign.center,
-              ),
+              child: Text(athlete?.name ?? '—', style: Theme.of(context).textTheme.titleMedium?.copyWith(fontWeight: FontWeight.w600), textAlign: TextAlign.center),
             ),
             Padding(
               padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 8),
-              child: Text(
-                'Mode: ${state.testMode.label}',
-                textAlign: TextAlign.center,
-                style: Theme.of(context).textTheme.bodySmall?.copyWith(
-                      color: Theme.of(context).colorScheme.onSurfaceVariant,
-                    ),
-              ),
+              child: Text('Mode: ${state.testMode.label}', textAlign: TextAlign.center, style: Theme.of(context).textTheme.bodySmall?.copyWith(color: Theme.of(context).colorScheme.onSurfaceVariant)),
             ),
             Expanded(
               child: Padding(
@@ -368,34 +304,16 @@ class _RecordingScreenState extends State<RecordingScreen> {
                         _buildPreview(context),
                         if (_recording)
                           Positioned(
-                            top: 12,
-                            left: 12,
+                            top: 12, left: 12,
                             child: Container(
                               padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 6),
-                              decoration: BoxDecoration(
-                                color: Colors.red.withValues(alpha: 0.9),
-                                borderRadius: BorderRadius.circular(8),
-                              ),
+                              decoration: BoxDecoration(color: Colors.red.withValues(alpha: 0.9), borderRadius: BorderRadius.circular(8)),
                               child: Row(
                                 mainAxisSize: MainAxisSize.min,
                                 children: [
-                                  Container(
-                                    width: 8,
-                                    height: 8,
-                                    decoration: const BoxDecoration(
-                                      color: Colors.white,
-                                      shape: BoxShape.circle,
-                                    ),
-                                  ),
+                                  Container(width: 8, height: 8, decoration: const BoxDecoration(color: Colors.white, shape: BoxShape.circle)),
                                   const SizedBox(width: 8),
-                                  Text(
-                                    'REC ${_fmt(_seconds)}',
-                                    style: const TextStyle(
-                                      color: Colors.white,
-                                      fontWeight: FontWeight.w700,
-                                      fontFeatures: [FontFeature.tabularFigures()],
-                                    ),
-                                  ),
+                                  Text('REC ${_fmt(_seconds)}', style: const TextStyle(color: Colors.white, fontWeight: FontWeight.w700, fontFeatures: [FontFeature.tabularFigures()])),
                                 ],
                               ),
                             ),
@@ -410,19 +328,9 @@ class _RecordingScreenState extends State<RecordingScreen> {
               padding: const EdgeInsets.fromLTRB(20, 0, 20, 12),
               child: Row(
                 children: [
-                  Expanded(
-                    child: FilledButton.tonal(
-                      onPressed: _cameraInitializing ? null : _toggle,
-                      child: Text(_recording ? 'Jeda' : 'Mulai rekaman'),
-                    ),
-                  ),
+                  Expanded(child: FilledButton.tonal(onPressed: _cameraInitializing ? null : _toggle, child: Text(_recording ? 'Jeda' : 'Mulai rekaman'))),
                   const SizedBox(width: 12),
-                  Expanded(
-                    child: FilledButton(
-                      onPressed: _finish,
-                      child: const Text('Selesai & analisis'),
-                    ),
-                  ),
+                  Expanded(child: FilledButton(onPressed: _finish, child: const Text('Selesai & analisis'))),
                 ],
               ),
             ),
@@ -434,13 +342,7 @@ class _RecordingScreenState extends State<RecordingScreen> {
                     mainAxisAlignment: MainAxisAlignment.spaceBetween,
                     children: [
                       const Text('LOG INFERENSI', style: TextStyle(fontSize: 10, fontWeight: FontWeight.bold)),
-                      IconButton(
-                        icon: const Icon(Icons.copy, size: 16),
-                        onPressed: () {
-                          // This is a simple mock as I can't directly access clipboard in this environment easily.
-                          ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text('Log disalin (mock)')));
-                        },
-                      ),
+                      IconButton(icon: const Icon(Icons.copy, size: 16), onPressed: () => ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text('Log disalin')))),
                     ],
                   ),
                   Container(
@@ -449,10 +351,7 @@ class _RecordingScreenState extends State<RecordingScreen> {
                     child: ListView.builder(
                       controller: _logScrollController,
                       itemCount: _logHistory.length,
-                      itemBuilder: (context, index) => Padding(
-                        padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 2),
-                        child: Text(_logHistory[index], style: const TextStyle(fontFamily: 'monospace', fontSize: 10)),
-                      ),
+                      itemBuilder: (context, index) => Padding(padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 2), child: Text(_logHistory[index], style: const TextStyle(fontFamily: 'monospace', fontSize: 10))),
                     ),
                   ),
                 ],
@@ -465,84 +364,9 @@ class _RecordingScreenState extends State<RecordingScreen> {
   }
 
   Widget _buildPreview(BuildContext context) {
-    if (_cameraInitializing) {
-      return ColoredBox(
-        color: Theme.of(context).colorScheme.surfaceContainerHighest,
-        child: const Center(child: CircularProgressIndicator()),
-      );
-    }
-    if (_cameraError != null) {
-      return ColoredBox(
-        color: Theme.of(context).colorScheme.surfaceContainerHighest,
-        child: Padding(
-          padding: const EdgeInsets.all(16),
-          child: Column(
-            mainAxisAlignment: MainAxisAlignment.center,
-            children: [
-              Icon(Icons.videocam_off_outlined, size: 48, color: Theme.of(context).colorScheme.outline),
-              const SizedBox(height: 12),
-              Text(
-                _cameraError!,
-                textAlign: TextAlign.center,
-                style: Theme.of(context).textTheme.bodySmall,
-              ),
-              if (_isMobile) ...[
-                const SizedBox(height: 16),
-                FilledButton.tonal(
-                  onPressed: () async {
-                    await openAppSettings();
-                    if (!mounted) return;
-                    await _cameraController?.dispose();
-                    setState(() => _cameraController = null);
-                    await _initCamera();
-                  },
-                  child: const Text('Buka pengaturan'),
-                ),
-              ],
-            ],
-          ),
-        ),
-      );
-    }
-    if (!_isMobile) {
-      return Container(
-        decoration: BoxDecoration(
-          gradient: LinearGradient(
-            begin: Alignment.topLeft,
-            end: Alignment.bottomRight,
-            colors: [
-              Theme.of(context).colorScheme.surfaceContainerHighest,
-              Theme.of(context).colorScheme.surfaceContainerHigh,
-            ],
-          ),
-        ),
-        child: Column(
-          mainAxisAlignment: MainAxisAlignment.center,
-          children: [
-            Icon(
-              Icons.videocam_outlined,
-              size: 64,
-              color: Theme.of(context).colorScheme.outline,
-            ),
-            const SizedBox(height: 12),
-            Text(
-              'Preview kamera (demo)',
-              style: Theme.of(context).textTheme.titleSmall?.copyWith(
-                    color: Theme.of(context).colorScheme.onSurfaceVariant,
-                  ),
-            ),
-            const SizedBox(height: 8),
-            Text(
-              'Kamera diaktifkan di Android & iOS.',
-              textAlign: TextAlign.center,
-              style: Theme.of(context).textTheme.bodySmall?.copyWith(
-                    color: Theme.of(context).colorScheme.outline,
-                  ),
-            ),
-          ],
-        ),
-      );
-    }
+    if (_cameraInitializing) return ColoredBox(color: Theme.of(context).colorScheme.surfaceContainerHighest, child: const Center(child: CircularProgressIndicator()));
+    if (_cameraError != null) return ColoredBox(color: Theme.of(context).colorScheme.surfaceContainerHighest, child: Center(child: Text(_cameraError!)));
+    
     final c = _cameraController;
     if (c != null && c.value.isInitialized) {
       return Stack(
@@ -551,48 +375,17 @@ class _RecordingScreenState extends State<RecordingScreen> {
           CameraPreview(c),
           CustomPaint(painter: DetectionAreaPainter()),
           if (_recording && _detectionTimer != null)
-            Positioned(
-              bottom: 20,
-              right: 20,
-              child: Container(
-                padding: const EdgeInsets.all(8),
-                decoration: BoxDecoration(color: Colors.black54, borderRadius: BorderRadius.circular(8)),
-                child: Text('Mencari: ${_detectionTimerSeconds}s', style: const TextStyle(color: Colors.white, fontSize: 14)),
-              ),
-            ),
+             Positioned(bottom: 20, right: 20, child: Container(padding: const EdgeInsets.all(8), decoration: BoxDecoration(color: Colors.black54, borderRadius: BorderRadius.circular(8)), child: Text('Mencari: ${_detectionTimerSeconds}s', style: const TextStyle(color: Colors.white, fontSize: 14)))),
           if (_isPoseDetected)
-            Positioned(
-              bottom: 20,
-              right: 20,
-              child: Container(
-                padding: const EdgeInsets.all(8),
-                decoration: BoxDecoration(color: Colors.green.withValues(alpha: 0.7), borderRadius: BorderRadius.circular(8)),
-                child: Text('Ditemukan: ${_poseFoundTime}s', style: const TextStyle(color: Colors.white, fontSize: 14)),
-              ),
-            ),
+             Positioned(bottom: 20, right: 20, child: Container(padding: const EdgeInsets.all(8), decoration: BoxDecoration(color: Colors.green.withValues(alpha: 0.7), borderRadius: BorderRadius.circular(8)), child: Text('Ditemukan: ${_poseFoundTime}s', style: const TextStyle(color: Colors.white, fontSize: 14)))),
           if (_cameras.length > 1)
-            Positioned(
-              top: 12,
-              right: 12,
-              child: IconButton(
-                onPressed: _switchCamera,
-                icon: const Icon(Icons.flip_camera_ios, color: Colors.white),
-                style: IconButton.styleFrom(
-                  backgroundColor: Colors.black45,
-                ),
-              ),
-            ),
+             Positioned(top: 12, right: 12, child: IconButton(onPressed: _switchCamera, icon: const Icon(Icons.flip_camera_ios, color: Colors.white), style: IconButton.styleFrom(backgroundColor: Colors.black45))),
           if (_detectedPose != null && _imageSize != null)
-            CustomPaint(
-              painter: PosePainter(_detectedPose!, _imageSize!),
-            ),
+             CustomPaint(painter: PosePainter(_detectedPose!, _imageSize!)),
         ],
       );
     }
-    return ColoredBox(
-      color: Theme.of(context).colorScheme.surfaceContainerHighest,
-      child: const Center(child: CircularProgressIndicator()),
-    );
+    return ColoredBox(color: Theme.of(context).colorScheme.surfaceContainerHighest, child: const Center(child: CircularProgressIndicator()));
   }
 
   String _fmt(int s) {
@@ -605,27 +398,16 @@ class _RecordingScreenState extends State<RecordingScreen> {
 class PosePainter extends CustomPainter {
   final Pose pose;
   final Size imageSize;
-
   PosePainter(this.pose, this.imageSize);
-
   @override
   void paint(Canvas canvas, Size size) {
-    final paint = Paint()
-      ..color = Colors.green
-      ..strokeWidth = 4.0;
-
+    final paint = Paint()..color = Colors.green..strokeWidth = 4.0;
     final double scaleX = size.width / imageSize.width;
     final double scaleY = size.height / imageSize.height;
-
     for (final landmark in pose.landmarks.values) {
-      canvas.drawCircle(
-        Offset(landmark.x * scaleX, landmark.y * scaleY),
-        5.0,
-        paint,
-      );
+      canvas.drawCircle(Offset(landmark.x * scaleX, landmark.y * scaleY), 5.0, paint);
     }
   }
-
   @override
   bool shouldRepaint(PosePainter oldDelegate) => true;
 }
@@ -633,16 +415,8 @@ class PosePainter extends CustomPainter {
 class DetectionAreaPainter extends CustomPainter {
   @override
   void paint(Canvas canvas, Size size) {
-    final paint = Paint()
-      ..color = Colors.white.withValues(alpha: 0.5)
-      ..style = PaintingStyle.stroke
-      ..strokeWidth = 3.0;
-    
-    final rect = Rect.fromCenter(
-      center: Offset(size.width / 2, size.height / 2),
-      width: size.width * 0.6,
-      height: size.height * 0.6,
-    );
+    final paint = Paint()..color = Colors.white.withValues(alpha: 0.5)..style = PaintingStyle.stroke..strokeWidth = 3.0;
+    final rect = Rect.fromCenter(center: Offset(size.width / 2, size.height / 2), width: size.width * 0.6, height: size.height * 0.6);
     canvas.drawRect(rect, paint);
   }
   @override
