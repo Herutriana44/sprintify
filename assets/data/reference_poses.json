@@ -1,0 +1,30 @@
+{
+  "reference_poses": {
+    "bersedia": {
+      "landmarks": {
+        "left_shoulder": {"x": 0.5, "y": 0.3},
+        "right_shoulder": {"x": 0.6, "y": 0.3},
+        "left_hip": {"x": 0.5, "y": 0.5},
+        "right_hip": {"x": 0.6, "y": 0.5},
+        "left_knee": {"x": 0.4, "y": 0.7},
+        "right_knee": {"x": 0.7, "y": 0.7},
+        "left_ankle": {"x": 0.3, "y": 0.9},
+        "right_ankle": {"x": 0.8, "y": 0.9}
+      },
+      "description": "Posisi start blok dengan lutut ditekuk rendah."
+    },
+    "berlari": {
+      "landmarks": {
+        "left_shoulder": {"x": 0.4, "y": 0.3},
+        "right_shoulder": {"x": 0.7, "y": 0.3},
+        "left_hip": {"x": 0.45, "y": 0.5},
+        "right_hip": {"x": 0.65, "y": 0.5},
+        "left_knee": {"x": 0.35, "y": 0.7},
+        "right_knee": {"x": 0.75, "y": 0.6},
+        "left_ankle": {"x": 0.3, "y": 0.9},
+        "right_ankle": {"x": 0.8, "y": 0.8}
+      },
+      "description": "Posisi fase lari dengan satu kaki menendang ke depan."
+    }
+  }
+}

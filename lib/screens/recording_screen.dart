@@ -264,11 +264,17 @@ class _RecordingScreenState extends State<RecordingScreen> {
   }
 
   Future<void> _finish() async {
-    if (_recording && _cameraLive && _cameraController!.value.isRecordingVideo) {
-      try {
-        await _cameraController!.stopVideoRecording();
-      } catch (_) {}
+    if (_recording) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(content: Text('Harap berhenti merekam terlebih dahulu.')),
+      );
+      return;
     }
+
+    // Simulasi pengecekan hasil rekaman (perlu disesuaikan jika sudah ada path file)
+    // Jika tidak ada data video (misal _recording belum pernah true atau path kosong), hentikan
+    // Disini diasumsikan jika _recording sempat true, kita lanjut.
+    
     _timer?.cancel();
     if (!mounted) return;
     context.push('/processing');
