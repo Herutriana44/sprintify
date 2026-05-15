@@ -94,6 +94,34 @@ class SprintifyState extends ChangeNotifier {
     notifyListeners();
   }
 
+  /// Menangani hasil analisis AI dari Gemini.
+  void completeRunWithResult(String aiResult) {
+    final athlete = _selectedAthlete;
+    if (athlete == null) return;
+
+    // Untuk sementara, kita buat simulasi dasar karena data asli
+    // masih berupa teks dari AI.
+    final rnd = Random();
+    final time = 8.0 + rnd.nextDouble() * 2.0;
+    
+    final result = RunResult(
+      athleteId: athlete.id,
+      athleteName: athlete.name,
+      timeSeconds: double.parse(time.toStringAsFixed(1)),
+      category: PerformanceCategory.baik,
+      startMarkSeconds: 0.0,
+      finishMarkSeconds: time,
+      stepCount: 45,
+      avgSpeedKmh: 60 / time * 3.6,
+      recordedAt: DateTime.now(),
+      analysisNote: aiResult, // Simpan hasil Gemini
+    );
+
+    _lastRunResult = result;
+    _history.insert(0, result);
+    notifyListeners();
+  }
+
   PerformanceCategory _categoryForTime(double seconds) {
     if (seconds <= 8.5) return PerformanceCategory.baik;
     if (seconds <= 10.5) return PerformanceCategory.cukup;
