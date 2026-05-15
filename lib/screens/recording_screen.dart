@@ -155,6 +155,7 @@ class _RecordingScreenState extends State<RecordingScreen> {
   @override
   void dispose() {
     _timer?.cancel();
+    _detectionTimer?.cancel();
     _cameraController?.dispose();
     _poseDetector.close();
     super.dispose();
@@ -168,7 +169,9 @@ class _RecordingScreenState extends State<RecordingScreen> {
         timer.cancel();
         return;
       }
-      _detectionTimerSeconds++;
+      setState(() {
+        _detectionTimerSeconds++;
+      });
       if (_detectionTimerSeconds % 5 == 0) {
         _addLog('Mencari pose... (${_detectionTimerSeconds}s)');
       }
@@ -555,6 +558,26 @@ class _RecordingScreenState extends State<RecordingScreen> {
         children: [
           CameraPreview(c),
           CustomPaint(painter: DetectionAreaPainter()),
+          if (_recording && _detectionTimer != null)
+            Positioned(
+              bottom: 20,
+              right: 20,
+              child: Container(
+                padding: const EdgeInsets.all(8),
+                decoration: BoxDecoration(color: Colors.black54, borderRadius: BorderRadius.circular(8)),
+                child: Text('Mencari: ${_detectionTimerSeconds}s', style: const TextStyle(color: Colors.white, fontSize: 14)),
+              ),
+            ),
+          if (_isPoseDetected)
+            Positioned(
+              bottom: 20,
+              right: 20,
+              child: Container(
+                padding: const EdgeInsets.all(8),
+                decoration: BoxDecoration(color: Colors.green.withValues(alpha: 0.7), borderRadius: BorderRadius.circular(8)),
+                child: Text('Ditemukan: ${_poseFoundTime}s', style: const TextStyle(color: Colors.white, fontSize: 14)),
+              ),
+            ),
           if (_cameras.length > 1)
             Positioned(
               top: 12,
