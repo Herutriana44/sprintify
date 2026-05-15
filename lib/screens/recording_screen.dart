@@ -32,6 +32,7 @@ class _RecordingScreenState extends State<RecordingScreen> {
   final PoseDetector _poseDetector = PoseDetector(options: PoseDetectorOptions());
   bool _isBusy = false;
   Pose? _detectedPose; // Hasil dari deteksi pose
+  Size? _imageSize; // Ukuran gambar untuk scaling
 
   bool get _isMobile =>
       !kIsWeb &&
@@ -86,6 +87,7 @@ class _RecordingScreenState extends State<RecordingScreen> {
         selected,
         ResolutionPreset.medium,
         enableAudio: true,
+        imageFormatGroup: Platform.isAndroid ? ImageFormatGroup.yuv420 : ImageFormatGroup.bgra8888,
       );
       await controller.initialize();
       if (!mounted) {
@@ -93,16 +95,17 @@ class _RecordingScreenState extends State<RecordingScreen> {
         return;
       }
       
+      setState(() {
+        _cameraController = controller;
+        _cameraInitializing = false;
+      });
+
+      // Mulai stream gambar segera setelah inisialisasi agar pose detection langsung "on"
       controller.startImageStream((CameraImage image) {
         if (!_isBusy) {
           _isBusy = true;
           _processCameraImage(image);
         }
-      });
-      
-      setState(() {
-        _cameraController = controller;
-        _cameraInitializing = false;
       });
     } catch (e) {
       if (mounted) {
@@ -141,8 +144,16 @@ class _RecordingScreenState extends State<RecordingScreen> {
     try {
       final List<Pose> poses = await _poseDetector.processImage(inputImage);
       if (mounted) {
+        final sensorOrientation = _cameraController?.description.sensorOrientation ?? 0;
         setState(() {
-          _detectedPose = poses.isNotEmpty ? poses.first : null; // Hasil deteksi pose
+          _detectedPose = poses.isNotEmpty ? poses.first : null;
+          
+          // Swap dimensions if the image is rotated (90 or 270 degrees)
+          if (sensorOrientation == 90 || sensorOrientation == 270) {
+            _imageSize = Size(image.height.toDouble(), image.width.toDouble());
+          } else {
+            _imageSize = Size(image.width.toDouble(), image.height.toDouble());
+          }
         });
       }
     } catch (e) {
@@ -152,6 +163,8 @@ class _RecordingScreenState extends State<RecordingScreen> {
   }
 
   InputImage? _inputImageFromCameraImage(CameraImage image) {
+    if (_cameraController == null) return null;
+    
     final camera = _cameraController!.description;
     final sensorOrientation = camera.sensorOrientation;
     final inputImageFormat = InputImageFormatValue.fromRawValue(image.format.raw);
@@ -455,9 +468,9 @@ class _RecordingScreenState extends State<RecordingScreen> {
                 ),
               ),
             ),
-          if (_detectedPose != null)
+          if (_detectedPose != null && _imageSize != null)
             CustomPaint(
-              painter: PosePainter(_detectedPose!),
+              painter: PosePainter(_detectedPose!, _imageSize!),
             ),
         ],
       );
@@ -476,9 +489,10 @@ class _RecordingScreenState extends State<RecordingScreen> {
 }
 
 class PosePainter extends CustomPainter {
-  final Pose pose; // Hasil deteksi pose
+  final Pose pose;
+  final Size imageSize;
 
-  PosePainter(this.pose);
+  PosePainter(this.pose, this.imageSize);
 
   @override
   void paint(Canvas canvas, Size size) {
@@ -486,9 +500,12 @@ class PosePainter extends CustomPainter {
       ..color = Colors.green
       ..strokeWidth = 4.0;
 
-    for (final landmark in pose.landmarks.values) { // Hasil deteksi pose
+    final double scaleX = size.width / imageSize.width;
+    final double scaleY = size.height / imageSize.height;
+
+    for (final landmark in pose.landmarks.values) {
       canvas.drawCircle(
-        Offset(landmark.x * size.width / 1000, landmark.y * size.height / 1000),
+        Offset(landmark.x * scaleX, landmark.y * scaleY),
         5.0,
         paint,
       );
