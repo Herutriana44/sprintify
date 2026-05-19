@@ -21,7 +21,7 @@ class _SplashScreenState extends State<SplashScreen> {
 
   Future<void> _bootstrap() async {
     await Future.wait<void>([
-      _requestMobileCameraPermissions(),
+      // _requestMobileCameraPermissions(),
       Future<void>.delayed(const Duration(milliseconds: 1800)),
     ]);
     if (!mounted) return;
