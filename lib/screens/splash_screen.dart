@@ -39,8 +39,13 @@ class _SplashScreenState extends State<SplashScreen> {
         defaultTargetPlatform != TargetPlatform.iOS) {
       return;
     }
-    await Permission.camera.request();
-    await Permission.microphone.request();
+
+    try {
+      await Permission.camera.request();
+      await Permission.microphone.request();
+    } catch (e) {
+      debugPrint('Error requesting permissions: $e');
+    }
   }
 
   @override
