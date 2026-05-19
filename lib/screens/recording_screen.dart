@@ -8,6 +8,7 @@ import 'package:go_router/go_router.dart';
 import 'package:permission_handler/permission_handler.dart';
 import 'package:provider/provider.dart';
 import 'package:google_mlkit_pose_detection/google_mlkit_pose_detection.dart';
+import 'package:sprintify/services/logger_service.dart';
 import 'package:sprintify/services/analysis/analysis_service.dart';
 
 import '../models/test_mode.dart';
@@ -48,24 +49,13 @@ class _RecordingScreenState extends State<RecordingScreen> {
   bool _isPoseDetected = false;
   int _poseFoundTime = 0;
 
-  final List<String> _logHistory = [];
-  final ScrollController _logScrollController = ScrollController();
+  final LoggerService _logger = LoggerService();
 
-  void _addLog(String message) {
+  Future<void> _addLog(String message, {LogType type = LogType.app, bool isError = false}) async {
     if (!mounted) return;
-    setState(() {
-      _logHistory.add('${DateTime.now().toString().split(' ').last.substring(0, 8)}: $message');
-      if (_logHistory.length > 50) _logHistory.removeAt(0);
-    });
-    WidgetsBinding.instance.addPostFrameCallback((_) {
-      if (_logScrollController.hasClients) {
-        _logScrollController.animateTo(
-          _logScrollController.position.maxScrollExtent,
-          duration: const Duration(milliseconds: 200),
-          curve: Curves.easeOut,
-        );
-      }
-    });
+    
+    // Log to file
+    _logger.log(message, type: type, isError: isError);
   }
 
   bool get _isMobile =>
@@ -166,7 +156,7 @@ class _RecordingScreenState extends State<RecordingScreen> {
         _detectionTimerSeconds++;
       });
       if (_detectionTimerSeconds % 5 == 0) {
-        _addLog('Mencari pose... (${_detectionTimerSeconds}s)');
+        _addLog('Mencari pose... (${_detectionTimerSeconds}s)', type: LogType.inference);
       }
     });
   }
@@ -188,7 +178,7 @@ class _RecordingScreenState extends State<RecordingScreen> {
           if (_isPoseDetected) {
             _detectionTimer?.cancel();
             _poseFoundTime = _detectionTimerSeconds;
-            _addLog('OK: Pose ditemukan! (Berhenti di ${_poseFoundTime}s)');
+            _addLog('OK: Pose ditemukan! (Berhenti di ${_poseFoundTime}s)', type: LogType.inference);
           } else if (_recording) {
             _startDetectionTimer();
           }
@@ -216,7 +206,7 @@ class _RecordingScreenState extends State<RecordingScreen> {
       }
     } catch (e) {
       debugPrint('Error processing image: $e');
-      _addLog('Err: $e');
+      _addLog('Err: $e', isError: true);
     }
     _isBusy = false;
   }
@@ -358,6 +348,8 @@ class _RecordingScreenState extends State<RecordingScreen> {
                 ],
               ),
             ),
+// Hapus bagian tampilan log dari antarmuka pengguna
+            /*
             Padding(
               padding: const EdgeInsets.only(top: 8, bottom: 16),
               child: Column(
@@ -381,6 +373,7 @@ class _RecordingScreenState extends State<RecordingScreen> {
                 ],
               ),
             ),
+            */
           ],
         ),
       ),
