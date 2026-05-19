@@ -29,6 +29,8 @@ jobs:
             ${{ runner.os }}-pub-
 
       - run: flutter pub get
+      - run: flutter clean
+      - run: flutter pub get
       - name: Create .env file
         run: |
           echo "GEMINI_API_KEY=${{ secrets.GEMINI_API_KEY }}" >> .env
