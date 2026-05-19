@@ -54,8 +54,8 @@ class _RecordingScreenState extends State<RecordingScreen> {
   Future<void> _addLog(String message, {LogType type = LogType.app, bool isError = false}) async {
     if (!mounted) return;
     
-    // Log to file
-    _logger.log(message, type: type, isError: isError);
+    // Log to file is temporarily disabled
+    // _logger.log(message, type: type, isError: isError);
   }
 
   bool get _isMobile =>
