@@ -7,7 +7,18 @@ import 'providers/sprintify_state.dart';
 
 Future<void> main() async {
   WidgetsFlutterBinding.ensureInitialized();
-  await dotenv.load(fileName: ".env");
+
+  // Tangkap error Flutter
+  FlutterError.onError = (FlutterErrorDetails details) {
+    debugPrint('FLUTTER ERROR: ${details.exception}');
+  };
+
+  try {
+    await dotenv.load(fileName: ".env");
+  } catch (e) {
+    debugPrint('DOTENV ERROR: $e');
+  }
+
   runApp(
     ChangeNotifierProvider<SprintifyState>(
       create: (_) => SprintifyState(),
