@@ -1,0 +1,5 @@
+2026-05-23T07:56:17.1859082Z ##[group]Run flutter build apk
+flutter build apk
+shell: /usr/bin/bash -e {0}
+env:
+  FLUTTER_ROOT: /opt

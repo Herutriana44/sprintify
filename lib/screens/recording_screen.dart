@@ -28,6 +28,7 @@ class _RecordingScreenState extends State<RecordingScreen> {
   final List<double> _bersediaScores = [];
   final List<double> _lariScores = [];
 
+  String? _videoPath;
   bool _recording = false;
   int _seconds = 0;
   Timer? _timer;
@@ -253,7 +254,16 @@ class _RecordingScreenState extends State<RecordingScreen> {
         });
       } else {
         if (c.value.isRecordingVideo) {
-          await c.stopVideoRecording();
+          final XFile file = await c.stopVideoRecording();
+          _videoPath = file.path;
+          
+          // Simpan ke direktori aplikasi
+          final appDocDir = await getApplicationDocumentsDirectory();
+          final fileName = 'run_${DateTime.now().millisecondsSinceEpoch}.mp4';
+          final savedFile = await File(file.path).copy('${appDocDir.path}/$fileName');
+          _videoPath = savedFile.path;
+          
+          debugPrint('Video saved to: ${_videoPath}');
         }
         _timer?.cancel();
         _timer = null;
