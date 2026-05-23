@@ -270,21 +270,26 @@ class _RecordingScreenState extends State<RecordingScreen> {
       } else {
         if (c.value.isRecordingVideo) {
           final XFile file = await c.stopVideoRecording();
-          
-          // Pastikan direktori ada
-          final appDocDir = await getApplicationDocumentsDirectory();
-          final videoDir = Directory('${appDocDir.path}/videos');
-          if (!await videoDir.exists()) {
-            await videoDir.create(recursive: true);
+
+          // Meminta izin penyimpanan terlebih dahulu
+          if (await Permission.storage.request().isGranted) {
+            // Gunakan direktori publik (misalnya Movies)
+            final directory = Directory('/storage/emulated/0/Movies/Sprintify');
+            if (!await directory.exists()) {
+              await directory.create(recursive: true);
+            }
+
+            final fileName = 'run_${DateTime.now().millisecondsSinceEpoch}.mp4';
+            final savedFile = await File(file.path).copy('${directory.path}/$fileName');
+            _videoPath = savedFile.path;
+
+            _addLog('Video disimpan di: $_videoPath', type: LogType.app);
+            debugPrint('Video saved to: ${_videoPath}');
+          } else {
+             _addLog('Izin penyimpanan ditolak.', isError: true);
           }
-          
-          final fileName = 'run_${DateTime.now().millisecondsSinceEpoch}.mp4';
-          final savedFile = await File(file.path).copy('${videoDir.path}/$fileName');
-          _videoPath = savedFile.path;
-          
-          _addLog('Video disimpan di: $_videoPath', type: LogType.app);
-          debugPrint('Video saved to: $_videoPath');
         }
+
         _timer?.cancel();
         _timer = null;
         if (!mounted) return;
