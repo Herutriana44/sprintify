@@ -270,15 +270,20 @@ class _RecordingScreenState extends State<RecordingScreen> {
       } else {
         if (c.value.isRecordingVideo) {
           final XFile file = await c.stopVideoRecording();
-          _videoPath = file.path;
           
-          // Simpan ke direktori aplikasi
+          // Pastikan direktori ada
           final appDocDir = await getApplicationDocumentsDirectory();
+          final videoDir = Directory('${appDocDir.path}/videos');
+          if (!await videoDir.exists()) {
+            await videoDir.create(recursive: true);
+          }
+          
           final fileName = 'run_${DateTime.now().millisecondsSinceEpoch}.mp4';
-          final savedFile = await File(file.path).copy('${appDocDir.path}/$fileName');
+          final savedFile = await File(file.path).copy('${videoDir.path}/$fileName');
           _videoPath = savedFile.path;
           
-          debugPrint('Video saved to: ${_videoPath}');
+          _addLog('Video disimpan di: $_videoPath', type: LogType.app);
+          debugPrint('Video saved to: $_videoPath');
         }
         _timer?.cancel();
         _timer = null;
