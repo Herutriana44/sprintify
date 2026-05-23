@@ -51,13 +51,27 @@ class _RecordingScreenState extends State<RecordingScreen> {
   bool _isPoseDetected = false;
   int _poseFoundTime = 0;
 
+  final List<String> _logHistory = [];
+  final ScrollController _logScrollController = ScrollController();
   final LoggerService _logger = LoggerService();
 
   Future<void> _addLog(String message, {LogType type = LogType.app, bool isError = false}) async {
     if (!mounted) return;
     
-    // Log to file is temporarily disabled
-    // _logger.log(message, type: type, isError: isError);
+    _logger.log(message, type: type, isError: isError);
+
+    setState(() {
+      _logHistory.add('${DateTime.now().hour}:${DateTime.now().minute}:${DateTime.now().second} ${isError ? '[ERR]' : '[INF]'} $message');
+      if (_logHistory.length > 50) _logHistory.removeAt(0);
+    });
+    
+    if (_logScrollController.hasClients) {
+      _logScrollController.animateTo(
+        _logScrollController.position.maxScrollExtent,
+        duration: const Duration(milliseconds: 100),
+        curve: Curves.easeOut,
+      );
+    }
   }
 
   bool get _isMobile =>
@@ -359,8 +373,6 @@ class _RecordingScreenState extends State<RecordingScreen> {
                 ],
               ),
             ),
-// Hapus bagian tampilan log dari antarmuka pengguna
-            /*
             Padding(
               padding: const EdgeInsets.only(top: 8, bottom: 16),
               child: Column(
@@ -384,7 +396,6 @@ class _RecordingScreenState extends State<RecordingScreen> {
                 ],
               ),
             ),
-            */
           ],
         ),
       ),
