@@ -271,23 +271,27 @@ class _RecordingScreenState extends State<RecordingScreen> {
         if (c.value.isRecordingVideo) {
           final XFile file = await c.stopVideoRecording();
 
-          // Meminta izin penyimpanan terlebih dahulu
-          if (await Permission.storage.request().isGranted) {
-            // Gunakan direktori publik (misalnya Movies)
-            final directory = Directory('/storage/emulated/0/Movies/Sprintify');
-            if (!await directory.exists()) {
-              await directory.create(recursive: true);
-            }
-
-            final fileName = 'run_${DateTime.now().millisecondsSinceEpoch}.mp4';
-            final savedFile = await File(file.path).copy('${directory.path}/$fileName');
-            _videoPath = savedFile.path;
-
-            _addLog('Video disimpan di: $_videoPath', type: LogType.app);
-            debugPrint('Video saved to: ${_videoPath}');
-          } else {
-             _addLog('Izin penyimpanan ditolak.', isError: true);
+          // MENGGUNAKAN PATH_PROVIDER (Aman dari aturan Scoped Storage Android)
+          // getApplicationDocumentsDirectory() tidak butuh runtime permission storage
+          final directory = await getApplicationDocumentsDirectory();
+          final sprintifyDir = Directory('${directory.path}/Sprintify');
+          
+          if (!await sprintifyDir.exists()) {
+            await sprintifyDir.create(recursive: true);
           }
+
+          final fileName = 'run_${DateTime.now().millisecondsSinceEpoch}.mp4';
+          final targetPath = '${sprintifyDir.path}/$fileName';
+          
+          // Memindahkan file dari temporary ke folder Sprintify
+          final savedFile = await File(file.path).copy(targetPath);
+          
+          setState(() {
+            _videoPath = savedFile.path;
+          });
+
+          _addLog('Video disimpan di: $_videoPath', type: LogType.app);
+          debugPrint('Video saved to: $_videoPath');
         }
 
         _timer?.cancel();
@@ -296,6 +300,7 @@ class _RecordingScreenState extends State<RecordingScreen> {
         setState(() => _recording = false);
       }
     } catch (e) {
+      _addLog('Rekaman/Penyimpanan gagal: $e', isError: true);
       if (mounted) {
         ScaffoldMessenger.of(context).showSnackBar(
           SnackBar(content: Text('Rekaman gagal: $e')),
