@@ -93,17 +93,30 @@ class _RecordingScreenState extends State<RecordingScreen> {
     }
   }
 
-  /*
   Future<void> _pickVideo() async {
-    final XFile? file = await _picker.pickVideo(source: ImageSource.gallery);
-    if (file != null) {
-      setState(() {
-        _videoPath = file.path;
-      });
-      _addLog('Video dipilih: ${file.name}');
+    // Meminta izin penyimpanan/foto sesuai kebutuhan
+    var status = await Permission.storage.request();
+    // Pada Android 13+, gunakan photos
+    if (await Permission.photos.request().isGranted) {
+      status = PermissionStatus.granted;
+    }
+    
+    if (status.isGranted) {
+      // Aktifkan kembali setelah dependensi ditambahkan
+      /*
+      final XFile? file = await _picker.pickVideo(source: ImageSource.gallery);
+      if (file != null) {
+        setState(() {
+          _videoPath = file.path;
+        });
+        _addLog('Video dipilih: ${file.name}');
+      }
+      */
+      ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text('Silakan tambahkan image_picker ke pubspec.yaml')));
+    } else {
+      _addLog('Izin akses galeri ditolak.', isError: true);
     }
   }
-  */
 
   Future<void> _initCamera({int? cameraIndex}) async {
     setState(() {
@@ -405,13 +418,13 @@ class _RecordingScreenState extends State<RecordingScreen> {
                     children: [
                       Expanded(
                         child: FilledButton.tonal(
-                          onPressed: _cameraInitializing || _recording ? null : _toggle,
+                          onPressed: _cameraInitializing ? null : _toggle,
                           child: Text(_recording ? 'Berhenti' : 'Mulai rekaman'),
                         ),
                       ),
                       const SizedBox(width: 8),
                       IconButton(
-                        onPressed: null, // Dinonaktifkan sementara
+                        onPressed: _recording ? null : _pickVideo,
                         icon: const Icon(Icons.photo_library),
                         tooltip: 'Pilih dari galeri',
                       ),
