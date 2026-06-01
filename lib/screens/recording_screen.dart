@@ -299,17 +299,16 @@ class _RecordingScreenState extends State<RecordingScreen> {
         if (c.value.isRecordingVideo) {
           final XFile file = await c.stopVideoRecording();
 
-          // MENGGUNAKAN PATH_PROVIDER (Aman dari aturan Scoped Storage Android)
-          // getApplicationDocumentsDirectory() tidak butuh runtime permission storage
-          final directory = await getApplicationDocumentsDirectory();
-          final sprintifyDir = Directory('${directory.path}/Sprintify');
+          // Menggunakan folder publik Movies agar terlihat di aplikasi galeri
+          // Catatan: Pada Android 10+, direktori ini memerlukan akses media yang sudah diatur
+          final directory = Directory('/storage/emulated/0/Movies/Sprintify');
           
-          if (!await sprintifyDir.exists()) {
-            await sprintifyDir.create(recursive: true);
+          if (!await directory.exists()) {
+            await directory.create(recursive: true);
           }
 
           final fileName = 'run_${DateTime.now().millisecondsSinceEpoch}.mp4';
-          final targetPath = '${sprintifyDir.path}/$fileName';
+          final targetPath = '${directory.path}/$fileName';
           
           // Memindahkan file dari temporary ke folder Sprintify
           final savedFile = await File(file.path).copy(targetPath);
