@@ -94,14 +94,16 @@ class _RecordingScreenState extends State<RecordingScreen> {
   }
 
   Future<void> _pickVideo() async {
-    // Meminta izin penyimpanan/foto sesuai kebutuhan
-    var status = await Permission.storage.request();
-    // Pada Android 13+, gunakan photos
-    if (await Permission.photos.request().isGranted) {
-      status = PermissionStatus.granted;
-    }
+    // Meminta izin video dan foto secara bersamaan agar izin galeri muncul di pengaturan
+    final Map<Permission, PermissionStatus> statuses = await [
+      Permission.videos,
+      Permission.photos,
+    ].request();
     
-    if (status.isGranted) {
+    final bool isGranted = (statuses[Permission.videos] ?? PermissionStatus.denied).isGranted ||
+                           (statuses[Permission.photos] ?? PermissionStatus.denied).isGranted;
+    
+    if (isGranted) {
       // Aktifkan kembali setelah dependensi ditambahkan
       /*
       final XFile? file = await _picker.pickVideo(source: ImageSource.gallery);
@@ -113,8 +115,11 @@ class _RecordingScreenState extends State<RecordingScreen> {
       }
       */
       ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text('Silakan tambahkan image_picker ke pubspec.yaml')));
+    } else if ((statuses[Permission.videos] ?? PermissionStatus.denied).isPermanentlyDenied ||
+               (statuses[Permission.photos] ?? PermissionStatus.denied).isPermanentlyDenied) {
+      openAppSettings();
     } else {
-      _addLog('Izin akses galeri ditolak.', isError: true);
+      _addLog('Izin akses galeri/media ditolak.', isError: true);
     }
   }
 
