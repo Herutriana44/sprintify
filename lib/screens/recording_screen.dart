@@ -9,7 +9,7 @@ import 'package:path_provider/path_provider.dart';
 import 'package:permission_handler/permission_handler.dart';
 import 'package:provider/provider.dart';
 import 'package:google_mlkit_pose_detection/google_mlkit_pose_detection.dart';
-import 'package:image_picker/image_picker.dart';
+// import 'package:image_picker/image_picker.dart';
 import 'package:sprintify/services/logger_service.dart';
 import 'package:sprintify/services/analysis/analysis_service.dart';
 
@@ -37,7 +37,7 @@ class _RecordingScreenState extends State<RecordingScreen> {
 
   final CameraManager _cameraManager = CameraManager();
   final PoseManager _poseManager = PoseManager();
-  final ImagePicker _picker = ImagePicker();
+  // final dynamic _picker = null;
 
   CameraController? get _cameraController => _cameraManager.controller;
   List<CameraDescription> _cameras = [];
@@ -93,6 +93,7 @@ class _RecordingScreenState extends State<RecordingScreen> {
     }
   }
 
+  /*
   Future<void> _pickVideo() async {
     final XFile? file = await _picker.pickVideo(source: ImageSource.gallery);
     if (file != null) {
@@ -102,6 +103,7 @@ class _RecordingScreenState extends State<RecordingScreen> {
       _addLog('Video dipilih: ${file.name}');
     }
   }
+  */
 
   Future<void> _initCamera({int? cameraIndex}) async {
     setState(() {
@@ -409,7 +411,7 @@ class _RecordingScreenState extends State<RecordingScreen> {
                       ),
                       const SizedBox(width: 8),
                       IconButton(
-                        onPressed: _recording ? null : _pickVideo,
+                        onPressed: null, // Dinonaktifkan sementara
                         icon: const Icon(Icons.photo_library),
                         tooltip: 'Pilih dari galeri',
                       ),
