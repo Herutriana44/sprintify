@@ -4,19 +4,18 @@ import 'dart:io';
 import 'package:camera/camera.dart';
 import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
-import 'package:go_router/go_router.dart';
-import 'package:path_provider/path_provider.dart';
+import 'package:image_picker/image_picker.dart';
+import 'package:google_mlkit_pose_detection/google_mlkit_pose_detection.dart';
 import 'package:permission_handler/permission_handler.dart';
 import 'package:provider/provider.dart';
-import 'package:google_mlkit_pose_detection/google_mlkit_pose_detection.dart';
-import 'package:image_picker/image_picker.dart';
-import 'package:sprintify/services/logger_service.dart';
-import 'package:sprintify/services/analysis/analysis_service.dart';
 
 import '../models/test_mode.dart';
 import '../providers/sprintify_state.dart';
 import '../services/pose/pose_manager.dart';
 import '../services/camera/camera_manager.dart';
+import '../services/logger_service.dart';
+import '../services/analysis/analysis_service.dart';
+import 'temp_result_screen.dart';
 
 class RecordingScreen extends StatefulWidget {
   const RecordingScreen({super.key});
@@ -44,7 +43,7 @@ class _RecordingScreenState extends State<RecordingScreen> {
   int _selectedCameraIndex = 0;
   bool _cameraInitializing = false;
   String? _cameraError;
-  
+
   bool _isBusy = false;
   Pose? _detectedPose;
   Size? _imageSize;
@@ -57,23 +56,22 @@ class _RecordingScreenState extends State<RecordingScreen> {
   final ScrollController _logScrollController = ScrollController();
   final LoggerService _logger = LoggerService();
 
-  Future<void> _addLog(String message, {LogType type = LogType.app, bool isError = false}) async {
-    if (!mounted) return;
-    
-    _logger.log(message, type: type, isError: isError);
-
-    setState(() {
-      _logHistory.add('${DateTime.now().hour}:${DateTime.now().minute}:${DateTime.now().second} ${isError ? '[ERR]' : '[INF]'} $message');
-      if (_logHistory.length > 50) _logHistory.removeAt(0);
-    });
-    
-    if (_logScrollController.hasClients) {
-      _logScrollController.animateTo(
-        _logScrollController.position.maxScrollExtent,
-        duration: const Duration(milliseconds: 100),
-        curve: Curves.easeOut,
-      );
+  @override
+  void initState() {
+    super.initState();
+    _analysisService.loadReferencePoses();
+    if (_isMobile) {
+      _initCamera();
     }
+  }
+
+  @override
+  void dispose() {
+    _timer?.cancel();
+    _detectionTimer?.cancel();
+    _cameraManager.dispose();
+    _poseManager.dispose();
+    super.dispose();
   }
 
   bool get _isMobile =>
@@ -84,17 +82,23 @@ class _RecordingScreenState extends State<RecordingScreen> {
   bool get _cameraLive =>
       _isMobile && _cameraController != null && _cameraController!.value.isInitialized;
 
-  @override
-  void initState() {
-    super.initState();
-    _analysisService.loadReferencePoses();
-    if (_isMobile) {
-      _initCamera();
+  Future<void> _addLog(String message, {LogType type = LogType.app, bool isError = false}) async {
+    if (!mounted) return;
+    _logger.log(message, type: type, isError: isError);
+    setState(() {
+      _logHistory.add('${DateTime.now().hour}:${DateTime.now().minute}:${DateTime.now().second} ${isError ? '[ERR]' : '[INF]'} $message');
+      if (_logHistory.length > 50) _logHistory.removeAt(0);
+    });
+    if (_logScrollController.hasClients) {
+      _logScrollController.animateTo(
+        _logScrollController.position.maxScrollExtent,
+        duration: const Duration(milliseconds: 100),
+        curve: Curves.easeOut,
+      );
     }
   }
 
   Future<void> _pickVideo() async {
-    // Meminta izin video dan foto secara bersamaan agar izin galeri muncul di pengaturan
     final Map<Permission, PermissionStatus> statuses = await [
       Permission.videos,
       Permission.photos,
@@ -148,7 +152,6 @@ class _RecordingScreenState extends State<RecordingScreen> {
         }
         return;
       }
-      
       _selectedCameraIndex = cameraIndex ?? 0;
       await _cameraManager.initialize(_cameras[_selectedCameraIndex], (image) {
         if (!_isBusy) {
@@ -156,7 +159,6 @@ class _RecordingScreenState extends State<RecordingScreen> {
           _processCameraImage(image);
         }
       });
-      
       if (!mounted) return;
       setState(() {
         _cameraInitializing = false;
@@ -174,18 +176,8 @@ class _RecordingScreenState extends State<RecordingScreen> {
   Future<void> _switchCamera() async {
     await _cameraManager.dispose();
     setState(() {});
-    
     final newIndex = (_selectedCameraIndex + 1) % _cameras.length;
     await _initCamera(cameraIndex: newIndex);
-  }
-
-  @override
-  void dispose() {
-    _timer?.cancel();
-    _detectionTimer?.cancel();
-    _cameraManager.dispose();
-    _poseManager.dispose();
-    super.dispose();
   }
 
   void _startDetectionTimer() {
@@ -231,7 +223,6 @@ class _RecordingScreenState extends State<RecordingScreen> {
         if (isPersonDetected) {
           final bersediaScore = _analysisService.calculatePoseScore(poses.first, 'bersedia');
           final lariScore = _analysisService.calculatePoseScore(poses.first, 'berlari');
-          
           if (_recording) {
             _bersediaScores.add(bersediaScore);
             _lariScores.add(lariScore);
@@ -240,7 +231,6 @@ class _RecordingScreenState extends State<RecordingScreen> {
 
         setState(() {
           _detectedPose = isPersonDetected ? poses.first : null;
-          
           if (sensorOrientation == 90 || sensorOrientation == 270) {
             _imageSize = Size(image.height.toDouble(), image.width.toDouble());
           } else {
@@ -298,29 +288,18 @@ class _RecordingScreenState extends State<RecordingScreen> {
       } else {
         if (c.value.isRecordingVideo) {
           final XFile file = await c.stopVideoRecording();
-
-          // Menggunakan folder publik Movies agar terlihat di aplikasi galeri
-          // Catatan: Pada Android 10+, direktori ini memerlukan akses media yang sudah diatur
           final directory = Directory('/storage/emulated/0/Movies/Sprintify');
-          
           if (!await directory.exists()) {
             await directory.create(recursive: true);
           }
-
           final fileName = 'run_${DateTime.now().millisecondsSinceEpoch}.mp4';
           final targetPath = '${directory.path}/$fileName';
-          
-          // Memindahkan file dari temporary ke folder Sprintify
           final savedFile = await File(file.path).copy(targetPath);
-          
           setState(() {
             _videoPath = savedFile.path;
           });
-
           _addLog('Video disimpan di: $_videoPath', type: LogType.app);
-          debugPrint('Video saved to: $_videoPath');
         }
-
         _timer?.cancel();
         _timer = null;
         if (!mounted) return;
@@ -328,41 +307,22 @@ class _RecordingScreenState extends State<RecordingScreen> {
       }
     } catch (e) {
       _addLog('Rekaman/Penyimpanan gagal: $e', isError: true);
-      if (mounted) {
-        ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(content: Text('Rekaman gagal: $e')),
-        );
-      }
     }
-  import 'temp_result_screen.dart';
-  import 'package:sprintify/services/logger_service.dart';
-  ...
-    Future<void> _finish() async {
-      if (_recording) {
-        ScaffoldMessenger.of(context).showSnackBar(
-          const SnackBar(content: Text('Harap berhenti merekam terlebih dahulu.')),
-        );
-        return;
-      }
+  }
 
-      if (_videoPath == null) {
-        ScaffoldMessenger.of(context).showSnackBar(
-          const SnackBar(content: Text('Tidak ada video yang tersedia.')),
-        );
-        return;
-      }
-
-      _timer?.cancel();
-      if (!mounted) return;
-
-      Navigator.push(
-        context,
-        MaterialPageRoute(
-          builder: (context) => TempResultScreen(videoPath: _videoPath!),
-        ),
-      );
+  Future<void> _finish() async {
+    if (_recording) {
+      ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text('Harap berhenti merekam terlebih dahulu.')));
+      return;
     }
-
+    if (_videoPath == null) {
+      ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text('Tidak ada video yang tersedia.')));
+      return;
+    }
+    _timer?.cancel();
+    if (!mounted) return;
+    Navigator.push(context, MaterialPageRoute(builder: (context) => TempResultScreen(videoPath: _videoPath!)));
+  }
 
   @override
   Widget build(BuildContext context) {
