@@ -4,6 +4,7 @@ import 'dart:io';
 import 'package:camera/camera.dart';
 import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
+import 'package:flutter/services.dart';
 import 'package:image_picker/image_picker.dart';
 import 'package:google_mlkit_pose_detection/google_mlkit_pose_detection.dart';
 import 'package:permission_handler/permission_handler.dart';
@@ -419,7 +420,17 @@ class _RecordingScreenState extends State<RecordingScreen> {
                     mainAxisAlignment: MainAxisAlignment.spaceBetween,
                     children: [
                       const Text('LOG INFERENSI', style: TextStyle(fontSize: 10, fontWeight: FontWeight.bold)),
-                      IconButton(icon: const Icon(Icons.copy, size: 16), onPressed: () => ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text('Log disalin')))),
+                      IconButton(
+                        icon: const Icon(Icons.copy, size: 16),
+                        onPressed: () {
+                          final logText = _logHistory.join('\n');
+                          Clipboard.setData(ClipboardData(text: logText)).then((_) {
+                            ScaffoldMessenger.of(context).showSnackBar(
+                              const SnackBar(content: Text('Log disalin ke clipboard')),
+                            );
+                          });
+                        },
+                      ),
                     ],
                   ),
                   Container(
