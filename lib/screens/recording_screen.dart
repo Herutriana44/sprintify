@@ -9,6 +9,7 @@ import 'package:path_provider/path_provider.dart';
 import 'package:permission_handler/permission_handler.dart';
 import 'package:provider/provider.dart';
 import 'package:google_mlkit_pose_detection/google_mlkit_pose_detection.dart';
+import 'package:image_picker/image_picker.dart';
 import 'package:sprintify/services/logger_service.dart';
 import 'package:sprintify/services/analysis/analysis_service.dart';
 
@@ -36,6 +37,7 @@ class _RecordingScreenState extends State<RecordingScreen> {
 
   final CameraManager _cameraManager = CameraManager();
   final PoseManager _poseManager = PoseManager();
+  final ImagePicker _picker = ImagePicker();
 
   CameraController? get _cameraController => _cameraManager.controller;
   List<CameraDescription> _cameras = [];
@@ -44,8 +46,8 @@ class _RecordingScreenState extends State<RecordingScreen> {
   String? _cameraError;
   
   bool _isBusy = false;
-  Pose? _detectedPose; // Hasil dari deteksi pose
-  Size? _imageSize; // Ukuran gambar untuk scaling
+  Pose? _detectedPose;
+  Size? _imageSize;
   int _detectionTimerSeconds = 0;
   Timer? _detectionTimer;
   bool _isPoseDetected = false;
@@ -88,6 +90,16 @@ class _RecordingScreenState extends State<RecordingScreen> {
     _analysisService.loadReferencePoses();
     if (_isMobile) {
       _initCamera();
+    }
+  }
+
+  Future<void> _pickVideo() async {
+    final XFile? file = await _picker.pickVideo(source: ImageSource.gallery);
+    if (file != null) {
+      setState(() {
+        _videoPath = file.path;
+      });
+      _addLog('Video dipilih: ${file.name}');
     }
   }
 
@@ -380,11 +392,36 @@ class _RecordingScreenState extends State<RecordingScreen> {
             ),
             Padding(
               padding: const EdgeInsets.fromLTRB(20, 0, 20, 12),
-              child: Row(
+              child: Column(
                 children: [
-                  Expanded(child: FilledButton.tonal(onPressed: _cameraInitializing ? null : _toggle, child: Text(_recording ? 'Berhenti' : 'Mulai rekaman'))),
-                  const SizedBox(width: 12),
-                  Expanded(child: FilledButton(onPressed: _finish, child: const Text('Selesai & analisis'))),
+                  if (_videoPath != null)
+                    Padding(
+                      padding: const EdgeInsets.only(bottom: 8),
+                      child: Text('File terpilih: ${File(_videoPath!).path.split('/').last}', style: Theme.of(context).textTheme.bodySmall, overflow: TextOverflow.ellipsis),
+                    ),
+                  Row(
+                    children: [
+                      Expanded(
+                        child: FilledButton.tonal(
+                          onPressed: _cameraInitializing || _recording ? null : _toggle,
+                          child: Text(_recording ? 'Berhenti' : 'Mulai rekaman'),
+                        ),
+                      ),
+                      const SizedBox(width: 8),
+                      IconButton(
+                        onPressed: _recording ? null : _pickVideo,
+                        icon: const Icon(Icons.photo_library),
+                        tooltip: 'Pilih dari galeri',
+                      ),
+                      const SizedBox(width: 8),
+                      Expanded(
+                        child: FilledButton(
+                          onPressed: _finish,
+                          child: const Text('Selesai & analisis'),
+                        ),
+                      ),
+                    ],
+                  ),
                 ],
               ),
             ),
