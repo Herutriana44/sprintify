@@ -9,7 +9,7 @@ import 'package:path_provider/path_provider.dart';
 import 'package:permission_handler/permission_handler.dart';
 import 'package:provider/provider.dart';
 import 'package:google_mlkit_pose_detection/google_mlkit_pose_detection.dart';
-// import 'package:image_picker/image_picker.dart';
+import 'package:image_picker/image_picker.dart';
 import 'package:sprintify/services/logger_service.dart';
 import 'package:sprintify/services/analysis/analysis_service.dart';
 
@@ -37,7 +37,7 @@ class _RecordingScreenState extends State<RecordingScreen> {
 
   final CameraManager _cameraManager = CameraManager();
   final PoseManager _poseManager = PoseManager();
-  // final dynamic _picker = null;
+  final ImagePicker _picker = ImagePicker();
 
   CameraController? get _cameraController => _cameraManager.controller;
   List<CameraDescription> _cameras = [];
@@ -104,8 +104,6 @@ class _RecordingScreenState extends State<RecordingScreen> {
                            (statuses[Permission.photos] ?? PermissionStatus.denied).isGranted;
     
     if (isGranted) {
-      // Aktifkan kembali setelah dependensi ditambahkan
-      /*
       final XFile? file = await _picker.pickVideo(source: ImageSource.gallery);
       if (file != null) {
         setState(() {
@@ -113,8 +111,6 @@ class _RecordingScreenState extends State<RecordingScreen> {
         });
         _addLog('Video dipilih: ${file.name}');
       }
-      */
-      ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text('Silakan tambahkan image_picker ke pubspec.yaml')));
     } else if ((statuses[Permission.videos] ?? PermissionStatus.denied).isPermanentlyDenied ||
                (statuses[Permission.photos] ?? PermissionStatus.denied).isPermanentlyDenied) {
       openAppSettings();
