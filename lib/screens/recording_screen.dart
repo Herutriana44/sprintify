@@ -334,24 +334,35 @@ class _RecordingScreenState extends State<RecordingScreen> {
         );
       }
     }
-  }
+  import 'temp_result_screen.dart';
+  import 'package:sprintify/services/logger_service.dart';
+  ...
+    Future<void> _finish() async {
+      if (_recording) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(content: Text('Harap berhenti merekam terlebih dahulu.')),
+        );
+        return;
+      }
 
-  Future<void> _finish() async {
-    if (_recording) {
-      ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(content: Text('Harap berhenti merekam terlebih dahulu.')),
+      if (_videoPath == null) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(content: Text('Tidak ada video yang tersedia.')),
+        );
+        return;
+      }
+
+      _timer?.cancel();
+      if (!mounted) return;
+
+      Navigator.push(
+        context,
+        MaterialPageRoute(
+          builder: (context) => TempResultScreen(videoPath: _videoPath!),
+        ),
       );
-      return;
     }
 
-    // Simulasi pengecekan hasil rekaman (perlu disesuaikan jika sudah ada path file)
-    // Jika tidak ada data video (misal _recording belum pernah true atau path kosong), hentikan
-    // Disini diasumsikan jika _recording sempat true, kita lanjut.
-    
-    _timer?.cancel();
-    if (!mounted) return;
-    context.push('/processing');
-  }
 
   @override
   Widget build(BuildContext context) {
