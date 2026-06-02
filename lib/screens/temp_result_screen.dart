@@ -3,8 +3,13 @@ import 'package:flutter/material.dart';
 
 class TempResultScreen extends StatelessWidget {
   final String videoPath;
+  final List<File> sampleFrames;
 
-  const TempResultScreen({super.key, required this.videoPath});
+  const TempResultScreen({
+    super.key, 
+    required this.videoPath,
+    required this.sampleFrames,
+  });
 
   @override
   Widget build(BuildContext context) {
@@ -31,12 +36,18 @@ class TempResultScreen extends StatelessWidget {
           const SizedBox(height: 30),
           Text('Sample Frames', style: Theme.of(context).textTheme.headlineSmall),
           const SizedBox(height: 10),
-          ...List.generate(5, (index) {
+          ...sampleFrames.map((file) {
             return Container(
               margin: const EdgeInsets.symmetric(vertical: 8),
-              height: 150,
-              color: Colors.grey[300],
-              child: Center(child: Text('Frame ${index + 1}')),
+              height: 200,
+              decoration: BoxDecoration(
+                border: Border.all(color: Colors.grey),
+                borderRadius: BorderRadius.circular(8),
+              ),
+              child: ClipRRect(
+                borderRadius: BorderRadius.circular(8),
+                child: Image.file(file, fit: BoxFit.cover),
+              ),
             );
           }),
           const SizedBox(height: 30),
