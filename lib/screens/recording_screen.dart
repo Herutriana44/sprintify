@@ -16,6 +16,7 @@ import '../services/pose/pose_manager.dart';
 import '../services/camera/camera_manager.dart';
 import '../services/logger_service.dart';
 import '../services/analysis/analysis_service.dart';
+import '../services/analysis/frame_extractor.dart';
 import 'temp_result_screen.dart';
 
 class RecordingScreen extends StatefulWidget {
@@ -322,7 +323,21 @@ class _RecordingScreenState extends State<RecordingScreen> {
     }
     _timer?.cancel();
     if (!mounted) return;
-    Navigator.push(context, MaterialPageRoute(builder: (context) => TempResultScreen(videoPath: _videoPath!, sampleFrames: const [])));
+
+    // Tampilkan loading indicator
+    showDialog(
+      context: context,
+      barrierDismissible: false,
+      builder: (_) => const Center(child: CircularProgressIndicator()),
+    );
+
+    // Proses ekstraksi frame
+    final frames = await FrameExtractor.extractFrames(_videoPath!, 5);
+    
+    if (!mounted) return;
+    Navigator.pop(context); // Tutup dialog loading
+
+    Navigator.push(context, MaterialPageRoute(builder: (context) => TempResultScreen(videoPath: _videoPath!, sampleFrames: frames)));
   }
 
   @override
