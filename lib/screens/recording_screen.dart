@@ -322,7 +322,7 @@ class _RecordingScreenState extends State<RecordingScreen> {
     }
     _timer?.cancel();
     if (!mounted) return;
-    Navigator.push(context, MaterialPageRoute(builder: (context) => TempResultScreen(videoPath: _videoPath!)));
+    Navigator.push(context, MaterialPageRoute(builder: (context) => TempResultScreen(videoPath: _videoPath!, sampleFrames: const [])));
   }
 
   @override
