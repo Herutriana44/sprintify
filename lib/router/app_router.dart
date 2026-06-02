@@ -17,7 +17,7 @@ import '../screens/test_prep_screen.dart';
 
 GoRouter createAppRouter() {
   return GoRouter(
-    initialLocation: '/login',
+    initialLocation: '/splash',
     routes: [
       GoRoute(
         path: '/splash',
