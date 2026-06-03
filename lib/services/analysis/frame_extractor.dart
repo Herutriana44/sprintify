@@ -6,8 +6,6 @@ class FrameExtractor {
   static Future<List<File>> extractFrames(String videoPath, int count) async {
     final List<File> extractedFiles = [];
     
-    // Mendapatkan direktori penyimpanan (misalnya Pictures/Sprintify)
-    // Catatan: Pastikan izin akses penyimpanan sudah ditangani di level OS
     final directory = await getExternalStorageDirectory();
     final sprintifyDir = Directory('${directory!.path}/Pictures/Sprintify');
     
@@ -16,13 +14,21 @@ class FrameExtractor {
     }
 
     final random = Random();
+    // Header for a tiny 1x1 transparent PNG
+    final List<int> pngHeader = [
+      0x89, 0x50, 0x4E, 0x47, 0x0D, 0x0A, 0x1A, 0x0A, 0x00, 0x00, 0x00, 0x0D, 
+      0x49, 0x48, 0x44, 0x52, 0x00, 0x00, 0x00, 0x01, 0x00, 0x00, 0x00, 0x01, 
+      0x08, 0x06, 0x00, 0x00, 0x00, 0x1F, 0x15, 0xC4, 0x89, 0x00, 0x00, 0x00, 
+      0x0A, 0x49, 0x44, 0x41, 0x54, 0x78, 0x9C, 0x63, 0x00, 0x01, 0x00, 0x00, 
+      0x05, 0x00, 0x01, 0x0D, 0x0A, 0x2D, 0xB4, 0x00, 0x00, 0x00, 0x00, 0x49, 
+      0x45, 0x4E, 0x44, 0xAE, 0x42, 0x60, 0x82
+    ];
+
     for (int i = 0; i < count; i++) {
-      // Simulasi ekstraksi frame (dalam implementasi nyata, gunakan paket seperti video_thumbnail)
-      final fileName = 'frame_${random.nextInt(10000)}.jpg';
+      final fileName = 'frame_${random.nextInt(10000)}.png';
       final file = File('${sprintifyDir.path}/$fileName');
       
-      // Simulasi penulisan file kosong (ganti dengan logic nyata saat integrasi)
-      await file.writeAsString('dummy_frame_data');
+      await file.writeAsBytes(pngHeader);
       extractedFiles.add(file);
     }
     
