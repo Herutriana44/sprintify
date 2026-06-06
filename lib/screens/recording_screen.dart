@@ -429,6 +429,11 @@ class _RecordingScreenState extends State<RecordingScreen> {
     }
     _timer?.cancel();
 
+    // Rekapitulasi Penilaian
+    final avgBersedia = _bersediaScores.isEmpty ? 0.0 : _bersediaScores.reduce((a, b) => a + b) / _bersediaScores.length;
+    final avgBerlari = _berlariScores.isEmpty ? 0.0 : _berlariScores.reduce((a, b) => a + b) / _berlariScores.length;
+    _addLog('Penilaian Selesai. Rata-rata Skor: Bersedia: ${avgBersedia.toStringAsFixed(2)}, Berlari: ${avgBerlari.toStringAsFixed(2)}', type: LogType.app);
+
     final pending = PendingAnalysis(
       videoPath: _videoPath!,
       timerSeconds: _seconds,
