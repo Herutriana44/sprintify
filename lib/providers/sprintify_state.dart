@@ -1,8 +1,7 @@
-import 'dart:math';
-
 import 'package:flutter/foundation.dart';
 
 import '../models/athlete.dart';
+import '../models/pending_analysis.dart';
 import '../models/performance_category.dart';
 import '../models/run_result.dart';
 import '../models/test_mode.dart';
@@ -20,6 +19,10 @@ class SprintifyState extends ChangeNotifier {
   Athlete? _selectedAthlete;
   TestMode _testMode = TestMode.videoOnly;
 
+  /// Data analisis yang dikumpulkan dari layar rekaman,
+  /// menunggu diproses di [ProcessingScreen].
+  PendingAnalysis? pendingAnalysis;
+
   List<Athlete> get athletes => List.unmodifiable(_athletes);
   List<RunResult> get history => List.unmodifiable(_history);
   int get totalAttempts => _totalAttempts;
@@ -34,6 +37,12 @@ class SprintifyState extends ChangeNotifier {
 
   void setTestMode(TestMode mode) {
     _testMode = mode;
+    notifyListeners();
+  }
+
+  /// Simpan data pending dari layar rekaman sebelum pindah ke processing.
+  void setPendingAnalysis(PendingAnalysis data) {
+    pendingAnalysis = data;
     notifyListeners();
   }
 
@@ -66,65 +75,52 @@ class SprintifyState extends ChangeNotifier {
     notifyListeners();
   }
 
-  /// Simulasi hasil analisis setelah "processing".
-  void completeRunWithSimulatedResult() {
+  /// Selesaikan analisis dengan hasil lengkap dari pipeline penilaian.
+  void completeRunWithFullResult({
+    required String aiAnalysis,
+    required double? bersediaScore,
+    required double? berlariScore,
+    required List<String> recommendations,
+    required int bersediaFrameCount,
+    required int berlariFrameCount,
+  }) {
     final athlete = _selectedAthlete;
+    final pending = pendingAnalysis;
     if (athlete == null) return;
 
-    final rnd = Random();
-    final base = 7.5 + rnd.nextDouble() * 3.5;
-    final time = double.parse(base.toStringAsFixed(1));
-    final category = _categoryForTime(time);
+    final timeSeconds = pending?.timerSeconds.toDouble() ?? 0.0;
+    final category = _categoryForScore(bersediaScore, berlariScore);
 
     final result = RunResult(
       athleteId: athlete.id,
       athleteName: athlete.name,
-      timeSeconds: time,
+      timeSeconds: timeSeconds,
       category: category,
       startMarkSeconds: 0.0,
-      finishMarkSeconds: time,
-      stepCount: 42 + rnd.nextInt(20),
-      avgSpeedKmh: 60 / time * 3.6,
+      finishMarkSeconds: timeSeconds,
+      stepCount: berlariFrameCount,
+      avgSpeedKmh: timeSeconds > 0 ? (60 / timeSeconds * 3.6) : 0,
       recordedAt: DateTime.now(),
+      analysisNote: aiAnalysis,
+      bersediaScore: bersediaScore,
+      berlariScore: berlariScore,
+      recommendations: recommendations,
+      bersediaFrameCount: bersediaFrameCount,
+      berlariFrameCount: berlariFrameCount,
     );
 
     _lastRunResult = result;
     _history.insert(0, result);
     _totalAttempts += 1;
+    pendingAnalysis = null;
     notifyListeners();
   }
 
-  /// Menangani hasil analisis AI dari Gemini.
-  void completeRunWithResult(String aiResult) {
-    final athlete = _selectedAthlete;
-    if (athlete == null) return;
-
-    // Untuk sementara, kita buat simulasi dasar karena data asli
-    // masih berupa teks dari AI.
-    final rnd = Random();
-    final time = 8.0 + rnd.nextDouble() * 2.0;
-    
-    final result = RunResult(
-      athleteId: athlete.id,
-      athleteName: athlete.name,
-      timeSeconds: double.parse(time.toStringAsFixed(1)),
-      category: PerformanceCategory.baik,
-      startMarkSeconds: 0.0,
-      finishMarkSeconds: time,
-      stepCount: 45,
-      avgSpeedKmh: 60 / time * 3.6,
-      recordedAt: DateTime.now(),
-      analysisNote: aiResult, // Simpan hasil Gemini
-    );
-
-    _lastRunResult = result;
-    _history.insert(0, result);
-    notifyListeners();
-  }
-
-  PerformanceCategory _categoryForTime(double seconds) {
-    if (seconds <= 8.5) return PerformanceCategory.baik;
-    if (seconds <= 10.5) return PerformanceCategory.cukup;
+  PerformanceCategory _categoryForScore(
+      double? bersediaScore, double? berlariScore) {
+    final avg = ((bersediaScore ?? 0) + (berlariScore ?? 0)) / 2;
+    if (avg >= 75) return PerformanceCategory.baik;
+    if (avg >= 50) return PerformanceCategory.cukup;
     return PerformanceCategory.kurang;
   }
 }

@@ -1,30 +1,57 @@
 {
   "reference_poses": {
     "bersedia": {
-      "landmarks": {
-        "left_shoulder": {"x": 0.5, "y": 0.3},
-        "right_shoulder": {"x": 0.6, "y": 0.3},
-        "left_hip": {"x": 0.5, "y": 0.5},
-        "right_hip": {"x": 0.6, "y": 0.5},
-        "left_knee": {"x": 0.4, "y": 0.7},
-        "right_knee": {"x": 0.7, "y": 0.7},
-        "left_ankle": {"x": 0.3, "y": 0.9},
-        "right_ankle": {"x": 0.8, "y": 0.9}
+      "description": "Posisi start/bersedia: tubuh membungkuk ke depan, lutut ditekuk, tangan di tanah atau siap.",
+      "thresholds": {
+        "min_score_to_classify": 55.0
       },
-      "description": "Posisi start blok dengan lutut ditekuk rendah."
+      "landmarks": {
+        "nose": { "x": 0.50, "y": 0.18 },
+        "left_shoulder": { "x": 0.44, "y": 0.32 },
+        "right_shoulder": { "x": 0.56, "y": 0.32 },
+        "left_elbow": { "x": 0.35, "y": 0.46 },
+        "right_elbow": { "x": 0.65, "y": 0.46 },
+        "left_wrist": { "x": 0.30, "y": 0.58 },
+        "right_wrist": { "x": 0.70, "y": 0.58 },
+        "left_hip": { "x": 0.45, "y": 0.52 },
+        "right_hip": { "x": 0.55, "y": 0.52 },
+        "left_knee": { "x": 0.38, "y": 0.70 },
+        "right_knee": { "x": 0.62, "y": 0.70 },
+        "left_ankle": { "x": 0.32, "y": 0.88 },
+        "right_ankle": { "x": 0.68, "y": 0.88 }
+      },
+      "angles": {
+        "knee_bend_min": 60,
+        "knee_bend_max": 120,
+        "hip_lean_min": 30,
+        "hip_lean_max": 80
+      }
     },
     "berlari": {
-      "landmarks": {
-        "left_shoulder": {"x": 0.4, "y": 0.3},
-        "right_shoulder": {"x": 0.7, "y": 0.3},
-        "left_hip": {"x": 0.45, "y": 0.5},
-        "right_hip": {"x": 0.65, "y": 0.5},
-        "left_knee": {"x": 0.35, "y": 0.7},
-        "right_knee": {"x": 0.75, "y": 0.6},
-        "left_ankle": {"x": 0.3, "y": 0.9},
-        "right_ankle": {"x": 0.8, "y": 0.8}
+      "description": "Posisi berlari: badan condong ke depan, salah satu kaki terangkat, lengan berayun.",
+      "thresholds": {
+        "min_score_to_classify": 50.0
       },
-      "description": "Posisi fase lari dengan satu kaki menendang ke depan."
+      "landmarks": {
+        "nose": { "x": 0.50, "y": 0.15 },
+        "left_shoulder": { "x": 0.40, "y": 0.28 },
+        "right_shoulder": { "x": 0.60, "y": 0.28 },
+        "left_elbow": { "x": 0.28, "y": 0.42 },
+        "right_elbow": { "x": 0.72, "y": 0.38 },
+        "left_wrist": { "x": 0.22, "y": 0.30 },
+        "right_wrist": { "x": 0.78, "y": 0.50 },
+        "left_hip": { "x": 0.44, "y": 0.50 },
+        "right_hip": { "x": 0.56, "y": 0.50 },
+        "left_knee": { "x": 0.38, "y": 0.62 },
+        "right_knee": { "x": 0.64, "y": 0.55 },
+        "left_ankle": { "x": 0.33, "y": 0.82 },
+        "right_ankle": { "x": 0.70, "y": 0.72 }
+      },
+      "angles": {
+        "knee_lift_min": 45,
+        "trunk_lean_min": 5,
+        "trunk_lean_max": 30
+      }
     }
   }
 }

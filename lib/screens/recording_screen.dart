@@ -5,19 +5,20 @@ import 'package:camera/camera.dart';
 import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
+import 'package:go_router/go_router.dart';
 import 'package:image_picker/image_picker.dart';
 import 'package:google_mlkit_pose_detection/google_mlkit_pose_detection.dart';
 import 'package:permission_handler/permission_handler.dart';
 import 'package:provider/provider.dart';
 
+import '../models/pending_analysis.dart';
 import '../models/test_mode.dart';
 import '../providers/sprintify_state.dart';
 import '../services/pose/pose_manager.dart';
+import '../services/pose/pose_classifier.dart';
 import '../services/camera/camera_manager.dart';
 import '../services/logger_service.dart';
 import '../services/analysis/analysis_service.dart';
-import '../services/analysis/frame_extractor.dart';
-import 'temp_result_screen.dart';
 
 class RecordingScreen extends StatefulWidget {
   const RecordingScreen({super.key});
@@ -28,8 +29,16 @@ class RecordingScreen extends StatefulWidget {
 
 class _RecordingScreenState extends State<RecordingScreen> {
   final AnalysisService _analysisService = AnalysisService();
+
+  // Per-frame score accumulators
   final List<double> _bersediaScores = [];
-  final List<double> _lariScores = [];
+  final List<double> _berlariScores = [];
+
+  // Track best frame for each pose (path + score)
+  String? _bestBersediaFramePath;
+  double _bestBersediaScore = -1;
+  String? _bestBerlariFramePath;
+  double _bestBerlariScore = -1;
 
   String? _videoPath;
   bool _recording = false;
@@ -53,6 +62,9 @@ class _RecordingScreenState extends State<RecordingScreen> {
   Timer? _detectionTimer;
   bool _isPoseDetected = false;
   int _poseFoundTime = 0;
+
+  // Current frame label (for overlay display)
+  PoseLabel _currentLabel = PoseLabel.unknown;
 
   final List<String> _logHistory = [];
   final ScrollController _logScrollController = ScrollController();
@@ -82,13 +94,22 @@ class _RecordingScreenState extends State<RecordingScreen> {
           defaultTargetPlatform == TargetPlatform.iOS);
 
   bool get _cameraLive =>
-      _isMobile && _cameraController != null && _cameraController!.value.isInitialized;
+      _isMobile &&
+      _cameraController != null &&
+      _cameraController!.value.isInitialized;
 
-  Future<void> _addLog(String message, {LogType type = LogType.app, bool isError = false}) async {
+  // ---------------------------------------------------------------------------
+  // Logging
+  // ---------------------------------------------------------------------------
+
+  Future<void> _addLog(String message,
+      {LogType type = LogType.app, bool isError = false}) async {
     if (!mounted) return;
     _logger.log(message, type: type, isError: isError);
     setState(() {
-      _logHistory.add('${DateTime.now().hour}:${DateTime.now().minute}:${DateTime.now().second} ${isError ? '[ERR]' : '[INF]'} $message');
+      _logHistory.add(
+          '${DateTime.now().hour}:${DateTime.now().minute}:${DateTime.now().second} '
+          '${isError ? '[ERR]' : '[INF]'} $message');
       if (_logHistory.length > 50) _logHistory.removeAt(0);
     });
     if (_logScrollController.hasClients) {
@@ -100,30 +121,40 @@ class _RecordingScreenState extends State<RecordingScreen> {
     }
   }
 
+  // ---------------------------------------------------------------------------
+  // Gallery pick
+  // ---------------------------------------------------------------------------
+
   Future<void> _pickVideo() async {
     final Map<Permission, PermissionStatus> statuses = await [
       Permission.videos,
       Permission.photos,
     ].request();
-    
-    final bool isGranted = (statuses[Permission.videos] ?? PermissionStatus.denied).isGranted ||
-                           (statuses[Permission.photos] ?? PermissionStatus.denied).isGranted;
-    
+
+    final bool isGranted =
+        (statuses[Permission.videos] ?? PermissionStatus.denied).isGranted ||
+            (statuses[Permission.photos] ?? PermissionStatus.denied).isGranted;
+
     if (isGranted) {
-      final XFile? file = await _picker.pickVideo(source: ImageSource.gallery);
+      final XFile? file =
+          await _picker.pickVideo(source: ImageSource.gallery);
       if (file != null) {
-        setState(() {
-          _videoPath = file.path;
-        });
+        setState(() => _videoPath = file.path);
         _addLog('Video dipilih: ${file.name}');
       }
-    } else if ((statuses[Permission.videos] ?? PermissionStatus.denied).isPermanentlyDenied ||
-               (statuses[Permission.photos] ?? PermissionStatus.denied).isPermanentlyDenied) {
+    } else if ((statuses[Permission.videos] ?? PermissionStatus.denied)
+            .isPermanentlyDenied ||
+        (statuses[Permission.photos] ?? PermissionStatus.denied)
+            .isPermanentlyDenied) {
       openAppSettings();
     } else {
       _addLog('Izin akses galeri/media ditolak.', isError: true);
     }
   }
+
+  // ---------------------------------------------------------------------------
+  // Camera init
+  // ---------------------------------------------------------------------------
 
   Future<void> _initCamera({int? cameraIndex}) async {
     setState(() {
@@ -162,9 +193,7 @@ class _RecordingScreenState extends State<RecordingScreen> {
         }
       });
       if (!mounted) return;
-      setState(() {
-        _cameraInitializing = false;
-      });
+      setState(() => _cameraInitializing = false);
     } catch (e) {
       if (mounted) {
         setState(() {
@@ -182,22 +211,30 @@ class _RecordingScreenState extends State<RecordingScreen> {
     await _initCamera(cameraIndex: newIndex);
   }
 
+  // ---------------------------------------------------------------------------
+  // Detection timer
+  // ---------------------------------------------------------------------------
+
   void _startDetectionTimer() {
     _detectionTimerSeconds = 0;
     _detectionTimer?.cancel();
-    _detectionTimer = Timer.periodic(const Duration(seconds: 1), (timer) {
+    _detectionTimer =
+        Timer.periodic(const Duration(seconds: 1), (timer) {
       if (!_recording) {
         timer.cancel();
         return;
       }
-      setState(() {
-        _detectionTimerSeconds++;
-      });
+      setState(() => _detectionTimerSeconds++);
       if (_detectionTimerSeconds % 5 == 0) {
-        _addLog('Mencari pose... (${_detectionTimerSeconds}s)', type: LogType.inference);
+        _addLog('Mencari pose... (${_detectionTimerSeconds}s)',
+            type: LogType.inference);
       }
     });
   }
+
+  // ---------------------------------------------------------------------------
+  // Live frame processing
+  // ---------------------------------------------------------------------------
 
   Future<void> _processCameraImage(CameraImage image) async {
     final inputImage = _cameraManager.inputImageFromCameraImage(image);
@@ -208,7 +245,8 @@ class _RecordingScreenState extends State<RecordingScreen> {
     try {
       final List<Pose> poses = await _poseManager.processImage(inputImage);
       if (mounted) {
-        final sensorOrientation = _cameraController?.description.sensorOrientation ?? 0;
+        final sensorOrientation =
+            _cameraController?.description.sensorOrientation ?? 0;
         final bool isPersonDetected = poses.isNotEmpty;
 
         if (isPersonDetected != _isPoseDetected) {
@@ -216,27 +254,49 @@ class _RecordingScreenState extends State<RecordingScreen> {
           if (_isPoseDetected) {
             _detectionTimer?.cancel();
             _poseFoundTime = _detectionTimerSeconds;
-            _addLog('OK: Pose ditemukan! (Berhenti di ${_poseFoundTime}s)', type: LogType.inference);
+            _addLog('OK: Pose ditemukan! (${_poseFoundTime}s)',
+                type: LogType.inference);
           } else if (_recording) {
             _startDetectionTimer();
           }
         }
 
-        if (isPersonDetected) {
-          final bersediaScore = _analysisService.calculatePoseScore(poses.first, 'bersedia');
-          final lariScore = _analysisService.calculatePoseScore(poses.first, 'berlari');
+        PoseLabel currentLabel = PoseLabel.unknown;
+
+        if (isPersonDetected && _analysisService.isLoaded) {
+          final pose = poses.first;
+          final result = _analysisService.classifyPose(pose);
+          currentLabel = result.label;
+
           if (_recording) {
-            _bersediaScores.add(bersediaScore);
-            _lariScores.add(lariScore);
+            // Accumulate scores per classified label
+            if (result.label == PoseLabel.bersedia) {
+              _bersediaScores.add(result.score);
+              if (result.score > _bestBersediaScore) {
+                _bestBersediaScore = result.score;
+                // Save best frame snapshot (captured via camera image bytes)
+                _saveBestFrame(image, 'bersedia', result.score);
+              }
+            } else if (result.label == PoseLabel.berlari) {
+              _berlariScores.add(result.score);
+              if (result.score > _bestBerlariScore) {
+                _bestBerlariScore = result.score;
+                _saveBestFrame(image, 'berlari', result.score);
+              }
+            }
+            // unknown frames are skipped (no score added)
           }
         }
 
         setState(() {
+          _currentLabel = currentLabel;
           _detectedPose = isPersonDetected ? poses.first : null;
           if (sensorOrientation == 90 || sensorOrientation == 270) {
-            _imageSize = Size(image.height.toDouble(), image.width.toDouble());
+            _imageSize =
+                Size(image.height.toDouble(), image.width.toDouble());
           } else {
-            _imageSize = Size(image.width.toDouble(), image.height.toDouble());
+            _imageSize =
+                Size(image.width.toDouble(), image.height.toDouble());
           }
         });
       }
@@ -246,6 +306,34 @@ class _RecordingScreenState extends State<RecordingScreen> {
     }
     _isBusy = false;
   }
+
+  /// Simpan frame terbaik sebagai JPEG ke direktori sementara.
+  Future<void> _saveBestFrame(
+      CameraImage image, String label, double score) async {
+    try {
+      // NV21 / BGRA8888 planes → save raw bytes as a JPEG placeholder.
+      // Full decode ke JPEG membutuhkan package image/dart:ui,
+      // untuk sementara kita simpan raw plane bytes saja dan tandai ekstensi .jpg
+      final dir = Directory('/storage/emulated/0/Movies/Sprintify/frames');
+      if (!await dir.exists()) await dir.create(recursive: true);
+
+      final path = '${dir.path}/best_${label}_${DateTime.now().millisecondsSinceEpoch}.jpg';
+      // Gunakan plane pertama (Y channel / BGRA) — cukup untuk Gemini vision
+      await File(path).writeAsBytes(image.planes.first.bytes);
+
+      if (label == 'bersedia') {
+        _bestBersediaFramePath = path;
+      } else {
+        _bestBerlariFramePath = path;
+      }
+    } catch (e) {
+      debugPrint('Gagal menyimpan best frame: $e');
+    }
+  }
+
+  // ---------------------------------------------------------------------------
+  // Recording toggle
+  // ---------------------------------------------------------------------------
 
   Future<void> _toggle() async {
     if (_cameraLive) {
@@ -260,6 +348,12 @@ class _RecordingScreenState extends State<RecordingScreen> {
       _recording = !_recording;
       if (_recording) {
         _seconds = 0;
+        _bersediaScores.clear();
+        _berlariScores.clear();
+        _bestBersediaScore = -1;
+        _bestBerlariScore = -1;
+        _bestBersediaFramePath = null;
+        _bestBerlariFramePath = null;
         _timer = Timer.periodic(const Duration(seconds: 1), (_) {
           if (!mounted) return;
           setState(() => _seconds++);
@@ -281,6 +375,12 @@ class _RecordingScreenState extends State<RecordingScreen> {
         setState(() {
           _recording = true;
           _seconds = 0;
+          _bersediaScores.clear();
+          _berlariScores.clear();
+          _bestBersediaScore = -1;
+          _bestBerlariScore = -1;
+          _bestBersediaFramePath = null;
+          _bestBerlariFramePath = null;
           _startDetectionTimer();
           _timer = Timer.periodic(const Duration(seconds: 1), (_) {
             if (!mounted) return;
@@ -290,16 +390,16 @@ class _RecordingScreenState extends State<RecordingScreen> {
       } else {
         if (c.value.isRecordingVideo) {
           final XFile file = await c.stopVideoRecording();
-          final directory = Directory('/storage/emulated/0/Movies/Sprintify');
+          final directory =
+              Directory('/storage/emulated/0/Movies/Sprintify');
           if (!await directory.exists()) {
             await directory.create(recursive: true);
           }
-          final fileName = 'run_${DateTime.now().millisecondsSinceEpoch}.mp4';
+          final fileName =
+              'run_${DateTime.now().millisecondsSinceEpoch}.mp4';
           final targetPath = '${directory.path}/$fileName';
           final savedFile = await File(file.path).copy(targetPath);
-          setState(() {
-            _videoPath = savedFile.path;
-          });
+          setState(() => _videoPath = savedFile.path);
           _addLog('Video disimpan di: $_videoPath', type: LogType.app);
         }
         _timer?.cancel();
@@ -312,23 +412,44 @@ class _RecordingScreenState extends State<RecordingScreen> {
     }
   }
 
+  // ---------------------------------------------------------------------------
+  // Finish & submit
+  // ---------------------------------------------------------------------------
+
   Future<void> _finish() async {
     if (_recording) {
-      ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text('Harap berhenti merekam terlebih dahulu.')));
+      ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(content: Text('Harap berhenti merekam terlebih dahulu.')));
       return;
     }
     if (_videoPath == null) {
-      ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text('Tidak ada video yang tersedia.')));
+      ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(content: Text('Tidak ada video yang tersedia.')));
       return;
     }
     _timer?.cancel();
-    
-    // Tambahkan ekstraksi frame
-    final frames = await FrameExtractor.extractFrames(_videoPath!, 5);
-    
+
+    final pending = PendingAnalysis(
+      videoPath: _videoPath!,
+      timerSeconds: _seconds,
+      bersediaScores: List.unmodifiable(_bersediaScores),
+      berlariScores: List.unmodifiable(_berlariScores),
+      bestBersediaFrame: _bestBersediaFramePath != null
+          ? File(_bestBersediaFramePath!)
+          : null,
+      bestBerlariFrame: _bestBerlariFramePath != null
+          ? File(_bestBerlariFramePath!)
+          : null,
+    );
+
     if (!mounted) return;
-    Navigator.push(context, MaterialPageRoute(builder: (context) => TempResultScreen(videoPath: _videoPath!, sampleFrames: frames)));
+    context.read<SprintifyState>().setPendingAnalysis(pending);
+    context.go('/processing');
   }
+
+  // ---------------------------------------------------------------------------
+  // Build
+  // ---------------------------------------------------------------------------
 
   @override
   Widget build(BuildContext context) {
@@ -343,12 +464,47 @@ class _RecordingScreenState extends State<RecordingScreen> {
           children: [
             Padding(
               padding: const EdgeInsets.fromLTRB(20, 8, 20, 0),
-              child: Text(athlete?.name ?? '—', style: Theme.of(context).textTheme.titleMedium?.copyWith(fontWeight: FontWeight.w600), textAlign: TextAlign.center),
+              child: Text(
+                athlete?.name ?? '—',
+                style: Theme.of(context)
+                    .textTheme
+                    .titleMedium
+                    ?.copyWith(fontWeight: FontWeight.w600),
+                textAlign: TextAlign.center,
+              ),
             ),
             Padding(
-              padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 8),
-              child: Text('Mode: ${state.testMode.label}', textAlign: TextAlign.center, style: Theme.of(context).textTheme.bodySmall?.copyWith(color: Theme.of(context).colorScheme.onSurfaceVariant)),
+              padding:
+                  const EdgeInsets.symmetric(horizontal: 20, vertical: 4),
+              child: Text(
+                'Mode: ${state.testMode.label}',
+                textAlign: TextAlign.center,
+                style: Theme.of(context).textTheme.bodySmall?.copyWith(
+                    color: Theme.of(context).colorScheme.onSurfaceVariant),
+              ),
             ),
+            // Live score summary during recording
+            if (_recording)
+              Padding(
+                padding:
+                    const EdgeInsets.symmetric(horizontal: 20, vertical: 4),
+                child: Row(
+                  mainAxisAlignment: MainAxisAlignment.center,
+                  children: [
+                    _ScoreChip(
+                      label: 'Bersedia',
+                      count: _bersediaScores.length,
+                      color: Colors.blue,
+                    ),
+                    const SizedBox(width: 8),
+                    _ScoreChip(
+                      label: 'Berlari',
+                      count: _berlariScores.length,
+                      color: Colors.green,
+                    ),
+                  ],
+                ),
+              ),
             Expanded(
               child: Padding(
                 padding: const EdgeInsets.all(20),
@@ -362,17 +518,61 @@ class _RecordingScreenState extends State<RecordingScreen> {
                         _buildPreview(context),
                         if (_recording)
                           Positioned(
-                            top: 12, left: 12,
+                            top: 12,
+                            left: 12,
                             child: Container(
-                              padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 6),
-                              decoration: BoxDecoration(color: Colors.red.withValues(alpha: 0.9), borderRadius: BorderRadius.circular(8)),
+                              padding: const EdgeInsets.symmetric(
+                                  horizontal: 10, vertical: 6),
+                              decoration: BoxDecoration(
+                                color: Colors.red.withValues(alpha: 0.9),
+                                borderRadius: BorderRadius.circular(8),
+                              ),
                               child: Row(
                                 mainAxisSize: MainAxisSize.min,
                                 children: [
-                                  Container(width: 8, height: 8, decoration: const BoxDecoration(color: Colors.white, shape: BoxShape.circle)),
+                                  Container(
+                                    width: 8,
+                                    height: 8,
+                                    decoration: const BoxDecoration(
+                                        color: Colors.white,
+                                        shape: BoxShape.circle),
+                                  ),
                                   const SizedBox(width: 8),
-                                  Text('REC ${_fmt(_seconds)}', style: const TextStyle(color: Colors.white, fontWeight: FontWeight.w700, fontFeatures: [FontFeature.tabularFigures()])),
+                                  Text(
+                                    'REC ${_fmt(_seconds)}',
+                                    style: const TextStyle(
+                                      color: Colors.white,
+                                      fontWeight: FontWeight.w700,
+                                      fontFeatures: [
+                                        FontFeature.tabularFigures()
+                                      ],
+                                    ),
+                                  ),
                                 ],
+                              ),
+                            ),
+                          ),
+                        // Pose label overlay
+                        if (_recording && _currentLabel != PoseLabel.unknown)
+                          Positioned(
+                            top: 12,
+                            right: 12,
+                            child: Container(
+                              padding: const EdgeInsets.symmetric(
+                                  horizontal: 10, vertical: 6),
+                              decoration: BoxDecoration(
+                                color: _currentLabel == PoseLabel.bersedia
+                                    ? Colors.blue.withValues(alpha: 0.85)
+                                    : Colors.green.withValues(alpha: 0.85),
+                                borderRadius: BorderRadius.circular(8),
+                              ),
+                              child: Text(
+                                _currentLabel == PoseLabel.bersedia
+                                    ? 'Bersedia'
+                                    : 'Berlari',
+                                style: const TextStyle(
+                                    color: Colors.white,
+                                    fontWeight: FontWeight.w700),
                               ),
                             ),
                           ),
@@ -389,14 +589,20 @@ class _RecordingScreenState extends State<RecordingScreen> {
                   if (_videoPath != null)
                     Padding(
                       padding: const EdgeInsets.only(bottom: 8),
-                      child: Text('File terpilih: ${File(_videoPath!).path.split('/').last}', style: Theme.of(context).textTheme.bodySmall, overflow: TextOverflow.ellipsis),
+                      child: Text(
+                        'File terpilih: ${File(_videoPath!).path.split('/').last}',
+                        style: Theme.of(context).textTheme.bodySmall,
+                        overflow: TextOverflow.ellipsis,
+                      ),
                     ),
                   Row(
                     children: [
                       Expanded(
                         child: FilledButton.tonal(
-                          onPressed: _cameraInitializing ? null : _toggle,
-                          child: Text(_recording ? 'Berhenti' : 'Mulai rekaman'),
+                          onPressed:
+                              _cameraInitializing ? null : _toggle,
+                          child: Text(
+                              _recording ? 'Berhenti' : 'Mulai rekaman'),
                         ),
                       ),
                       const SizedBox(width: 8),
@@ -417,21 +623,29 @@ class _RecordingScreenState extends State<RecordingScreen> {
                 ],
               ),
             ),
+            // Log panel
             Padding(
-              padding: const EdgeInsets.only(top: 8, bottom: 16),
+              padding: const EdgeInsets.only(
+                  left: 20, right: 20, bottom: 16),
               child: Column(
                 children: [
                   Row(
                     mainAxisAlignment: MainAxisAlignment.spaceBetween,
                     children: [
-                      const Text('LOG INFERENSI', style: TextStyle(fontSize: 10, fontWeight: FontWeight.bold)),
+                      const Text('LOG INFERENSI',
+                          style: TextStyle(
+                              fontSize: 10, fontWeight: FontWeight.bold)),
                       IconButton(
                         icon: const Icon(Icons.copy, size: 16),
                         onPressed: () {
-                          final logText = _logHistory.join('\n');
-                          Clipboard.setData(ClipboardData(text: logText)).then((_) {
+                          Clipboard.setData(
+                                  ClipboardData(
+                                      text: _logHistory.join('\n')))
+                              .then((_) {
                             ScaffoldMessenger.of(context).showSnackBar(
-                              const SnackBar(content: Text('Log disalin ke clipboard')),
+                              const SnackBar(
+                                  content:
+                                      Text('Log disalin ke clipboard')),
                             );
                           });
                         },
@@ -440,11 +654,24 @@ class _RecordingScreenState extends State<RecordingScreen> {
                   ),
                   Container(
                     height: 100,
-                    decoration: BoxDecoration(color: Theme.of(context).colorScheme.surfaceContainer, borderRadius: BorderRadius.circular(8)),
+                    decoration: BoxDecoration(
+                      color: Theme.of(context)
+                          .colorScheme
+                          .surfaceContainer,
+                      borderRadius: BorderRadius.circular(8),
+                    ),
                     child: ListView.builder(
                       controller: _logScrollController,
                       itemCount: _logHistory.length,
-                      itemBuilder: (context, index) => Padding(padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 2), child: Text(_logHistory[index], style: const TextStyle(fontFamily: 'monospace', fontSize: 10))),
+                      itemBuilder: (context, index) => Padding(
+                        padding: const EdgeInsets.symmetric(
+                            horizontal: 8, vertical: 2),
+                        child: Text(
+                          _logHistory[index],
+                          style: const TextStyle(
+                              fontFamily: 'monospace', fontSize: 10),
+                        ),
+                      ),
                     ),
                   ),
                 ],
@@ -457,9 +684,19 @@ class _RecordingScreenState extends State<RecordingScreen> {
   }
 
   Widget _buildPreview(BuildContext context) {
-    if (_cameraInitializing) return ColoredBox(color: Theme.of(context).colorScheme.surfaceContainerHighest, child: const Center(child: CircularProgressIndicator()));
-    if (_cameraError != null) return ColoredBox(color: Theme.of(context).colorScheme.surfaceContainerHighest, child: Center(child: Text(_cameraError!)));
-    
+    if (_cameraInitializing) {
+      return ColoredBox(
+        color: Theme.of(context).colorScheme.surfaceContainerHighest,
+        child: const Center(child: CircularProgressIndicator()),
+      );
+    }
+    if (_cameraError != null) {
+      return ColoredBox(
+        color: Theme.of(context).colorScheme.surfaceContainerHighest,
+        child: Center(child: Text(_cameraError!)),
+      );
+    }
+
     final c = _cameraController;
     if (c != null && c.value.isInitialized) {
       return Stack(
@@ -468,17 +705,56 @@ class _RecordingScreenState extends State<RecordingScreen> {
           CameraPreview(c),
           CustomPaint(painter: DetectionAreaPainter()),
           if (_recording && _detectionTimer != null)
-             Positioned(bottom: 20, right: 20, child: Container(padding: const EdgeInsets.all(8), decoration: BoxDecoration(color: Colors.black54, borderRadius: BorderRadius.circular(8)), child: Text('Mencari: ${_detectionTimerSeconds}s', style: const TextStyle(color: Colors.white, fontSize: 14)))),
+            Positioned(
+              bottom: 20,
+              right: 20,
+              child: Container(
+                padding: const EdgeInsets.all(8),
+                decoration: BoxDecoration(
+                    color: Colors.black54,
+                    borderRadius: BorderRadius.circular(8)),
+                child: Text(
+                  'Mencari: ${_detectionTimerSeconds}s',
+                  style: const TextStyle(color: Colors.white, fontSize: 14),
+                ),
+              ),
+            ),
           if (_isPoseDetected)
-             Positioned(bottom: 20, right: 20, child: Container(padding: const EdgeInsets.all(8), decoration: BoxDecoration(color: Colors.green.withValues(alpha: 0.7), borderRadius: BorderRadius.circular(8)), child: Text('Ditemukan: ${_poseFoundTime}s', style: const TextStyle(color: Colors.white, fontSize: 14)))),
+            Positioned(
+              bottom: 20,
+              right: 20,
+              child: Container(
+                padding: const EdgeInsets.all(8),
+                decoration: BoxDecoration(
+                    color: Colors.green.withValues(alpha: 0.7),
+                    borderRadius: BorderRadius.circular(8)),
+                child: Text(
+                  'Ditemukan: ${_poseFoundTime}s',
+                  style: const TextStyle(color: Colors.white, fontSize: 14),
+                ),
+              ),
+            ),
           if (_cameras.length > 1)
-             Positioned(top: 12, right: 12, child: IconButton(onPressed: _switchCamera, icon: const Icon(Icons.flip_camera_ios, color: Colors.white), style: IconButton.styleFrom(backgroundColor: Colors.black45))),
+            Positioned(
+              top: 12,
+              right: 12,
+              child: IconButton(
+                onPressed: _switchCamera,
+                icon: const Icon(Icons.flip_camera_ios, color: Colors.white),
+                style: IconButton.styleFrom(
+                    backgroundColor: Colors.black45),
+              ),
+            ),
           if (_detectedPose != null && _imageSize != null)
-             CustomPaint(painter: PosePainter(_detectedPose!, _imageSize!)),
+            CustomPaint(
+                painter: PosePainter(_detectedPose!, _imageSize!)),
         ],
       );
     }
-    return ColoredBox(color: Theme.of(context).colorScheme.surfaceContainerHighest, child: const Center(child: CircularProgressIndicator()));
+    return ColoredBox(
+      color: Theme.of(context).colorScheme.surfaceContainerHighest,
+      child: const Center(child: CircularProgressIndicator()),
+    );
   }
 
   String _fmt(int s) {
@@ -488,19 +764,60 @@ class _RecordingScreenState extends State<RecordingScreen> {
   }
 }
 
+// ---------------------------------------------------------------------------
+// Helper widgets
+// ---------------------------------------------------------------------------
+
+class _ScoreChip extends StatelessWidget {
+  const _ScoreChip({
+    required this.label,
+    required this.count,
+    required this.color,
+  });
+  final String label;
+  final int count;
+  final Color color;
+
+  @override
+  Widget build(BuildContext context) {
+    return Container(
+      padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 4),
+      decoration: BoxDecoration(
+        color: color.withValues(alpha: 0.15),
+        borderRadius: BorderRadius.circular(20),
+        border: Border.all(color: color.withValues(alpha: 0.4)),
+      ),
+      child: Text(
+        '$label: $count frame',
+        style: TextStyle(
+            fontSize: 11, fontWeight: FontWeight.w600, color: color),
+      ),
+    );
+  }
+}
+
+// ---------------------------------------------------------------------------
+// Painters
+// ---------------------------------------------------------------------------
+
 class PosePainter extends CustomPainter {
   final Pose pose;
   final Size imageSize;
   PosePainter(this.pose, this.imageSize);
+
   @override
   void paint(Canvas canvas, Size size) {
-    final paint = Paint()..color = Colors.green..strokeWidth = 4.0;
+    final paint = Paint()
+      ..color = Colors.green
+      ..strokeWidth = 4.0;
     final double scaleX = size.width / imageSize.width;
     final double scaleY = size.height / imageSize.height;
     for (final landmark in pose.landmarks.values) {
-      canvas.drawCircle(Offset(landmark.x * scaleX, landmark.y * scaleY), 5.0, paint);
+      canvas.drawCircle(
+          Offset(landmark.x * scaleX, landmark.y * scaleY), 5.0, paint);
     }
   }
+
   @override
   bool shouldRepaint(PosePainter oldDelegate) => true;
 }
@@ -508,10 +825,18 @@ class PosePainter extends CustomPainter {
 class DetectionAreaPainter extends CustomPainter {
   @override
   void paint(Canvas canvas, Size size) {
-    final paint = Paint()..color = Colors.white.withValues(alpha: 0.5)..style = PaintingStyle.stroke..strokeWidth = 3.0;
-    final rect = Rect.fromCenter(center: Offset(size.width / 2, size.height / 2), width: size.width * 0.6, height: size.height * 0.6);
+    final paint = Paint()
+      ..color = Colors.white.withValues(alpha: 0.5)
+      ..style = PaintingStyle.stroke
+      ..strokeWidth = 3.0;
+    final rect = Rect.fromCenter(
+      center: Offset(size.width / 2, size.height / 2),
+      width: size.width * 0.6,
+      height: size.height * 0.6,
+    );
     canvas.drawRect(rect, paint);
   }
+
   @override
   bool shouldRepaint(covariant CustomPainter oldDelegate) => false;
 }
