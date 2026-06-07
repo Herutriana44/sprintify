@@ -430,6 +430,25 @@ class _RecordingScreenState extends State<RecordingScreen> {
     }
     _timer?.cancel();
 
+    // Tampilkan loading dialog saat mempersiapkan data
+    if (!mounted) return;
+    showDialog<void>(
+      context: context,
+      barrierDismissible: false,
+      builder: (_) => const PopScope(
+        canPop: false,
+        child: AlertDialog(
+          content: Row(
+            children: [
+              CircularProgressIndicator(),
+              SizedBox(width: 20),
+              Text('Mempersiapkan analisis…'),
+            ],
+          ),
+        ),
+      ),
+    );
+
     // Rekapitulasi Penilaian
     final avgBersedia = _bersediaScores.isEmpty ? 0.0 : _bersediaScores.reduce((a, b) => a + b) / _bersediaScores.length;
     final avgBerlari = _berlariScores.isEmpty ? 0.0 : _berlariScores.reduce((a, b) => a + b) / _berlariScores.length;
@@ -450,6 +469,9 @@ class _RecordingScreenState extends State<RecordingScreen> {
 
     if (!mounted) return;
     context.read<SprintifyState>().setPendingAnalysis(pending);
+
+    // Tutup loading dialog lalu navigasi
+    Navigator.of(context, rootNavigator: true).pop();
     context.push('/processing');
   }
 
