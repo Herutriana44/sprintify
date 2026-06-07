@@ -449,13 +449,8 @@ class _RecordingScreenState extends State<RecordingScreen> {
     );
 
     if (!mounted) return;
-    Navigator.push(
-      context,
-      MaterialPageRoute(
-        builder: (context) => AssessmentWaitingScreen(logs: _logHistory),
-      ),
-    );
-    // Setelah layar tunggu muncul, Anda bisa menambahkan logika pemicu analisis di sana
+    state.setPendingAnalysis(pending);
+    context.push('/processing');
   }
 
   // ---------------------------------------------------------------------------
