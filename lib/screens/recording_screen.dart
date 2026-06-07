@@ -19,6 +19,7 @@ import '../services/pose/pose_classifier.dart';
 import '../services/camera/camera_manager.dart';
 import '../services/logger_service.dart';
 import '../services/analysis/analysis_service.dart';
+import 'assessment_waiting_screen.dart';
 
 class RecordingScreen extends StatefulWidget {
   const RecordingScreen({super.key});
