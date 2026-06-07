@@ -449,7 +449,7 @@ class _RecordingScreenState extends State<RecordingScreen> {
     );
 
     if (!mounted) return;
-    state.setPendingAnalysis(pending);
+    context.read<SprintifyState>().setPendingAnalysis(pending);
     context.push('/processing');
   }
 

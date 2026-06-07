@@ -23,7 +23,8 @@ class ResultScreen extends StatelessWidget {
 
     final hasBersedia = r.bersediaScore != null;
     final hasBerlari = r.berlariScore != null;
-    final hasScore = hasBersedia || hasBerlari;
+    // Selalu tampilkan section skor posisi, gunakan 0 jika tidak terdeteksi
+    const hasScore = true;
 
     return Scaffold(
       appBar: AppBar(
@@ -111,25 +112,25 @@ class ResultScreen extends StatelessWidget {
               const SizedBox(height: 12),
               Row(
                 children: [
-                  if (hasBersedia)
-                    Expanded(
-                      child: _ScoreCard(
-                        label: 'Bersedia',
-                        score: r.bersediaScore!,
-                        frameCount: r.bersediaFrameCount,
-                        color: Colors.blue,
-                      ),
+                  Expanded(
+                    child: _ScoreCard(
+                      label: 'Bersedia',
+                      score: r.bersediaScore ?? 0.0,
+                      frameCount: r.bersediaFrameCount,
+                      color: Colors.blue,
+                      notDetected: !hasBersedia,
                     ),
-                  if (hasBersedia && hasBerlari) const SizedBox(width: 12),
-                  if (hasBerlari)
-                    Expanded(
-                      child: _ScoreCard(
-                        label: 'Berlari',
-                        score: r.berlariScore!,
-                        frameCount: r.berlariFrameCount,
-                        color: Colors.green,
-                      ),
+                  ),
+                  const SizedBox(width: 12),
+                  Expanded(
+                    child: _ScoreCard(
+                      label: 'Berlari',
+                      score: r.berlariScore ?? 0.0,
+                      frameCount: r.berlariFrameCount,
+                      color: Colors.green,
+                      notDetected: !hasBerlari,
                     ),
+                  ),
                 ],
               ),
               if (!hasBersedia || !hasBerlari)
@@ -332,6 +333,7 @@ class _ScoreCard extends StatelessWidget {
     required this.score,
     required this.frameCount,
     required this.color,
+    this.notDetected = false,
   });
 
   final String label;
@@ -339,13 +341,24 @@ class _ScoreCard extends StatelessWidget {
   final int frameCount;
   final Color color;
 
+  /// True jika posisi ini tidak terdeteksi sama sekali (skor asli null).
+  final bool notDetected;
+
   @override
   Widget build(BuildContext context) {
+    final displayColor = notDetected
+        ? Theme.of(context).colorScheme.onSurfaceVariant
+        : color;
+
     return Card(
       elevation: 0,
       shape: RoundedRectangleBorder(
         borderRadius: BorderRadius.circular(12),
-        side: BorderSide(color: color.withValues(alpha: 0.3)),
+        side: BorderSide(
+          color: notDetected
+              ? Theme.of(context).colorScheme.outlineVariant
+              : color.withValues(alpha: 0.3),
+        ),
       ),
       child: Padding(
         padding: const EdgeInsets.all(16),
@@ -355,29 +368,36 @@ class _ScoreCard extends StatelessWidget {
             Text(
               label,
               style: Theme.of(context).textTheme.labelMedium?.copyWith(
-                    color: color,
+                    color: displayColor,
                     fontWeight: FontWeight.w600,
                   ),
             ),
             const SizedBox(height: 8),
             Text(
-              score.toStringAsFixed(1),
+              notDetected ? '–' : score.toStringAsFixed(1),
               style: Theme.of(context).textTheme.headlineMedium?.copyWith(
                     fontWeight: FontWeight.w800,
-                    color: color,
+                    color: displayColor,
                   ),
             ),
             Text(
-              '/ 100',
+              notDetected ? 'Tidak terdeteksi' : '/ 100',
               style: Theme.of(context).textTheme.bodySmall?.copyWith(
                     color: Theme.of(context).colorScheme.onSurfaceVariant,
                   ),
             ),
             const SizedBox(height: 8),
             LinearProgressIndicator(
-              value: score / 100,
-              color: color,
-              backgroundColor: color.withValues(alpha: 0.15),
+              value: notDetected ? 0.0 : score / 100,
+              color: notDetected
+                  ? Theme.of(context).colorScheme.outlineVariant
+                  : color,
+              backgroundColor: notDetected
+                  ? Theme.of(context)
+                      .colorScheme
+                      .outlineVariant
+                      .withValues(alpha: 0.2)
+                  : color.withValues(alpha: 0.15),
               borderRadius: BorderRadius.circular(4),
               minHeight: 6,
             ),
