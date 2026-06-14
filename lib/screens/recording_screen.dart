@@ -64,9 +64,11 @@ class _RecordingScreenState extends State<RecordingScreen> {
   // ── Timer logika baru ──────────────────────────────────────────────────────
   // State mesin timer: idle → running → waiting (5 detik setelah start)
   bool _isPoseDetected = false;
-  bool _timerRunning = false;          // apakah timer sedang berjalan
+  bool _timerRunning = false;            // apakah timer sedang berjalan
   bool _waitingForStopDetection = false; // sedang di window 5 detik untuk stop
-  Timer? _stopWindowTimer;             // timer 5-detik setelah deteksi pertama
+  Timer? _stopWindowTimer;              // timer 5-detik setelah deteksi pertama
+  int _poseDetectedStreak = 0;          // frame berturut-turut pose terdeteksi
+  int _poseMissingStreak  = 0;          // frame berturut-turut pose tidak terdeteksi
 
   // Current frame label (for overlay display)
   PoseLabel _currentLabel = PoseLabel.unknown;
@@ -225,11 +227,49 @@ class _RecordingScreenState extends State<RecordingScreen> {
   // Timer logic: pose-triggered start/stop
   // ---------------------------------------------------------------------------
 
-  /// Dipanggil saat pose pertama kali terdeteksi di bounding box.
-  /// Memulai timer rekaman dan jadwalkan window 5 detik untuk cek stop.
-  void _onPoseEntered() {
+  // Mesin state timer:
+  //   idle → (pose masuk box) → running → (5s berlalu, pose masih ada) → stopped
+  //
+  // Aturan:
+  //   1. Pose masuk bounding box saat idle   → mulai timer + mulai countdown 5s
+  //   2. Countdown 5s habis, pose masih ada  → timer berhenti
+  //   3. Countdown 5s habis, pose hilang     → jadwalkan ulang countdown 5s
+  //   4. Noise frame (flicker deteksi)       → DIABAIKAN, pakai debounce
+
+  // Berapa frame berturut-turut pose harus terdeteksi sebelum dianggap "masuk"
+  static const int _poseDebounceFrames = 3;
+  int _poseDetectedStreak = 0;   // frame berturut-turut pose terdeteksi
+  int _poseMissingStreak  = 0;   // frame berturut-turut pose tidak terdeteksi
+
+  /// Dipanggil dari _processCameraImage setiap frame dengan status pose terkini.
+  void _handlePosePresence(bool poseInBox) {
     if (!_recording) return;
-    if (_timerRunning) return; // sudah berjalan, abaikan
+
+    if (poseInBox) {
+      _poseDetectedStreak++;
+      _poseMissingStreak = 0;
+    } else {
+      _poseMissingStreak++;
+      _poseDetectedStreak = 0;
+    }
+
+    // Update _isPoseDetected hanya setelah debounce terpenuhi
+    if (_poseDetectedStreak >= _poseDebounceFrames && !_isPoseDetected) {
+      _isPoseDetected = true;
+      if (!_timerRunning) {
+        _onPoseEntered();
+      }
+      // Bila timer sudah jalan, _isPoseDetected dipakai oleh _scheduleStopWindow
+    }
+
+    if (_poseMissingStreak >= _poseDebounceFrames && _isPoseDetected) {
+      _isPoseDetected = false;
+    }
+  }
+
+  /// Dipanggil saat pose pertama kali stabil terdeteksi di bounding box.
+  void _onPoseEntered() {
+    if (!_recording || _timerRunning) return;
 
     _timerRunning = true;
     _seconds = 0;
@@ -238,32 +278,37 @@ class _RecordingScreenState extends State<RecordingScreen> {
       if (!mounted) return;
       setState(() => _seconds++);
     });
-    _addLog('Pelari terdeteksi → Timer mulai', type: LogType.inference);
+    _addLog('Pelari masuk → Timer mulai', type: LogType.inference);
     _scheduleStopWindow();
   }
 
-  /// Jadwalkan window 5 detik: setelah 5 detik, jika pose masih terdeteksi
-  /// → hentikan timer. Jika tidak → biarkan timer terus berjalan dan tunggu
-  /// deteksi berikutnya.
+  /// Mulai countdown 5 detik. Saat habis:
+  ///   - pose masih ada → timer berhenti
+  ///   - pose hilang    → tunggu pose masuk lagi (idle kembali ke cek per-frame)
   void _scheduleStopWindow() {
     _stopWindowTimer?.cancel();
     _waitingForStopDetection = true;
+    if (mounted) setState(() {});
+
     _stopWindowTimer = Timer(const Duration(seconds: 5), () {
       if (!mounted) return;
       _waitingForStopDetection = false;
+
       if (_isPoseDetected && _timerRunning) {
-        // Pose masih terdeteksi setelah 5 detik → hentikan timer
-        _stopTimer();
-        _addLog('Pelari terdeteksi lagi setelah 5s → Timer berhenti',
+        // Pose masih ada setelah 5 detik → hentikan timer
+        _addLog('Pose terdeteksi setelah 5s → Timer berhenti',
             type: LogType.inference);
+        _stopTimer();
       } else {
-        // Tidak ada pose → timer terus, jadwalkan window berikutnya
+        // Pose hilang saat countdown habis → jadwalkan countdown baru
+        // supaya saat pose masuk lagi, timer langsung berhenti dalam 5s
         _addLog('Pose hilang, timer terus berjalan...', type: LogType.inference);
+        _scheduleStopWindow();
       }
     });
   }
 
-  /// Hentikan timer (pose ke-2 terdeteksi atau dipanggil manual).
+  /// Hentikan timer.
   void _stopTimer() {
     _timer?.cancel();
     _timer = null;
@@ -271,7 +316,7 @@ class _RecordingScreenState extends State<RecordingScreen> {
     _waitingForStopDetection = false;
     _stopWindowTimer?.cancel();
     _stopWindowTimer = null;
-    setState(() {});
+    if (mounted) setState(() {});
   }
 
   /// Reset semua state timer (saat rekaman dimulai ulang).
@@ -284,6 +329,8 @@ class _RecordingScreenState extends State<RecordingScreen> {
     _waitingForStopDetection = false;
     _seconds = 0;
     _isPoseDetected = false;
+    _poseDetectedStreak = 0;
+    _poseMissingStreak  = 0;
   }
 
   // ---------------------------------------------------------------------------
@@ -330,23 +377,8 @@ class _RecordingScreenState extends State<RecordingScreen> {
       final bool poseInBox = isPersonDetected &&
           _isPoseInBoundingBox(poses.first, currentImageSize);
 
-      if (poseInBox != _isPoseDetected) {
-        _isPoseDetected = poseInBox;
-        if (_isPoseDetected) {
-          // Pose baru masuk bounding box
-          if (!_timerRunning) {
-            _onPoseEntered();
-          } else if (_waitingForStopDetection) {
-            // Masih di window 5 detik → hentikan timer segera
-            _stopWindowTimer?.cancel();
-            _stopWindowTimer = null;
-            _waitingForStopDetection = false;
-            _stopTimer();
-            _addLog('Pelari terdeteksi di window 5s → Timer berhenti',
-                type: LogType.inference);
-          }
-        }
-      }
+      // Delegasikan ke mesin state dengan debounce — tidak pakai edge detection
+      _handlePosePresence(poseInBox);
 
       PoseLabel currentLabel = PoseLabel.unknown;
 
