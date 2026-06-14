@@ -59,10 +59,13 @@ class _RecordingScreenState extends State<RecordingScreen> {
   bool _isBusy = false;
   Pose? _detectedPose;
   Size? _imageSize;
-  int _detectionTimerSeconds = 0;
-  Timer? _detectionTimer;
+
+  // ── Timer logika baru ──────────────────────────────────────────────────────
+  // State mesin timer: idle → running → waiting (5 detik setelah start)
   bool _isPoseDetected = false;
-  int _poseFoundTime = 0;
+  bool _timerRunning = false;          // apakah timer sedang berjalan
+  bool _waitingForStopDetection = false; // sedang di window 5 detik untuk stop
+  Timer? _stopWindowTimer;             // timer 5-detik setelah deteksi pertama
 
   // Current frame label (for overlay display)
   PoseLabel _currentLabel = PoseLabel.unknown;
@@ -83,7 +86,7 @@ class _RecordingScreenState extends State<RecordingScreen> {
   @override
   void dispose() {
     _timer?.cancel();
-    _detectionTimer?.cancel();
+    _stopWindowTimer?.cancel();
     _cameraManager.dispose();
     _poseManager.dispose();
     super.dispose();
@@ -213,24 +216,68 @@ class _RecordingScreenState extends State<RecordingScreen> {
   }
 
   // ---------------------------------------------------------------------------
-  // Detection timer
+  // Timer logic: pose-triggered start/stop
   // ---------------------------------------------------------------------------
 
-  void _startDetectionTimer() {
-    _detectionTimerSeconds = 0;
-    _detectionTimer?.cancel();
-    _detectionTimer =
-        Timer.periodic(const Duration(seconds: 1), (timer) {
-      if (!_recording) {
-        timer.cancel();
-        return;
-      }
-      setState(() => _detectionTimerSeconds++);
-      if (_detectionTimerSeconds % 5 == 0) {
-        _addLog('Mencari pose... (${_detectionTimerSeconds}s)',
+  /// Dipanggil saat pose pertama kali terdeteksi di bounding box.
+  /// Memulai timer rekaman dan jadwalkan window 5 detik untuk cek stop.
+  void _onPoseEntered() {
+    if (!_recording) return;
+    if (_timerRunning) return; // sudah berjalan, abaikan
+
+    _timerRunning = true;
+    _seconds = 0;
+    _timer?.cancel();
+    _timer = Timer.periodic(const Duration(seconds: 1), (_) {
+      if (!mounted) return;
+      setState(() => _seconds++);
+    });
+    _addLog('Pelari terdeteksi → Timer mulai', type: LogType.inference);
+    _scheduleStopWindow();
+  }
+
+  /// Jadwalkan window 5 detik: setelah 5 detik, jika pose masih terdeteksi
+  /// → hentikan timer. Jika tidak → biarkan timer terus berjalan dan tunggu
+  /// deteksi berikutnya.
+  void _scheduleStopWindow() {
+    _stopWindowTimer?.cancel();
+    _waitingForStopDetection = true;
+    _stopWindowTimer = Timer(const Duration(seconds: 5), () {
+      if (!mounted) return;
+      _waitingForStopDetection = false;
+      if (_isPoseDetected && _timerRunning) {
+        // Pose masih terdeteksi setelah 5 detik → hentikan timer
+        _stopTimer();
+        _addLog('Pelari terdeteksi lagi setelah 5s → Timer berhenti',
             type: LogType.inference);
+      } else {
+        // Tidak ada pose → timer terus, jadwalkan window berikutnya
+        _addLog('Pose hilang, timer terus berjalan...', type: LogType.inference);
       }
     });
+  }
+
+  /// Hentikan timer (pose ke-2 terdeteksi atau dipanggil manual).
+  void _stopTimer() {
+    _timer?.cancel();
+    _timer = null;
+    _timerRunning = false;
+    _waitingForStopDetection = false;
+    _stopWindowTimer?.cancel();
+    _stopWindowTimer = null;
+    setState(() {});
+  }
+
+  /// Reset semua state timer (saat rekaman dimulai ulang).
+  void _resetTimerState() {
+    _timer?.cancel();
+    _timer = null;
+    _stopWindowTimer?.cancel();
+    _stopWindowTimer = null;
+    _timerRunning = false;
+    _waitingForStopDetection = false;
+    _seconds = 0;
+    _isPoseDetected = false;
   }
 
   // ---------------------------------------------------------------------------
@@ -250,15 +297,28 @@ class _RecordingScreenState extends State<RecordingScreen> {
             _cameraController?.description.sensorOrientation ?? 0;
         final bool isPersonDetected = poses.isNotEmpty;
 
-        if (isPersonDetected != _isPoseDetected) {
-          _isPoseDetected = isPersonDetected;
+        // ── Cek apakah pose masuk/keluar bounding box ──────────────────────
+        final bool poseInBox = isPersonDetected &&
+            _imageSize != null &&
+            _isPoseInBoundingBox(poses.first, _imageSize!);
+
+        if (poseInBox != _isPoseDetected) {
+          _isPoseDetected = poseInBox;
           if (_isPoseDetected) {
-            _detectionTimer?.cancel();
-            _poseFoundTime = _detectionTimerSeconds;
-            _addLog('OK: Pose ditemukan! (${_poseFoundTime}s)',
-                type: LogType.inference);
-          } else if (_recording) {
-            _startDetectionTimer();
+            // Pose baru masuk bounding box
+            if (!_timerRunning) {
+              // Timer belum berjalan → mulai timer
+              _onPoseEntered();
+            } else if (_waitingForStopDetection) {
+              // Timer sedang berjalan dan masih di window 5 detik,
+              // pose terdeteksi lagi → hentikan segera
+              _stopWindowTimer?.cancel();
+              _stopWindowTimer = null;
+              _waitingForStopDetection = false;
+              _stopTimer();
+              _addLog('Pelari terdeteksi di window 5s → Timer berhenti',
+                  type: LogType.inference);
+            }
           }
         }
 
@@ -308,6 +368,34 @@ class _RecordingScreenState extends State<RecordingScreen> {
     _isBusy = false;
   }
 
+  /// Cek apakah pose berada di dalam bounding box tengah layar (60% x 60%).
+  bool _isPoseInBoundingBox(Pose pose, Size imageSize) {
+    if (pose.landmarks.isEmpty) return false;
+
+    // Bounding box area: 60% dari lebar & tinggi gambar, di tengah
+    final boxLeft   = imageSize.width  * 0.20;
+    final boxTop    = imageSize.height * 0.20;
+    final boxRight  = imageSize.width  * 0.80;
+    final boxBottom = imageSize.height * 0.80;
+
+    // Hitung rata-rata koordinat landmark untuk menentukan posisi tubuh
+    double sumX = 0, sumY = 0;
+    int count = 0;
+    for (final lm in pose.landmarks.values) {
+      sumX += lm.x;
+      sumY += lm.y;
+      count++;
+    }
+    if (count == 0) return false;
+    final centerX = sumX / count;
+    final centerY = sumY / count;
+
+    return centerX >= boxLeft &&
+        centerX <= boxRight &&
+        centerY >= boxTop &&
+        centerY <= boxBottom;
+  }
+
   /// Simpan frame terbaik sebagai JPEG ke direktori sementara.
   Future<void> _saveBestFrame(
       CameraImage image, String label, double score) async {
@@ -348,20 +436,15 @@ class _RecordingScreenState extends State<RecordingScreen> {
     setState(() {
       _recording = !_recording;
       if (_recording) {
-        _seconds = 0;
+        _resetTimerState();
         _bersediaScores.clear();
         _berlariScores.clear();
         _bestBersediaScore = -1;
         _bestBerlariScore = -1;
         _bestBersediaFramePath = null;
         _bestBerlariFramePath = null;
-        _timer = Timer.periodic(const Duration(seconds: 1), (_) {
-          if (!mounted) return;
-          setState(() => _seconds++);
-        });
       } else {
-        _timer?.cancel();
-        _timer = null;
+        _resetTimerState();
       }
     });
   }
@@ -375,18 +458,13 @@ class _RecordingScreenState extends State<RecordingScreen> {
         if (!mounted) return;
         setState(() {
           _recording = true;
-          _seconds = 0;
+          _resetTimerState();
           _bersediaScores.clear();
           _berlariScores.clear();
           _bestBersediaScore = -1;
           _bestBerlariScore = -1;
           _bestBersediaFramePath = null;
           _bestBerlariFramePath = null;
-          _startDetectionTimer();
-          _timer = Timer.periodic(const Duration(seconds: 1), (_) {
-            if (!mounted) return;
-            setState(() => _seconds++);
-          });
         });
       } else {
         if (c.value.isRecordingVideo) {
@@ -405,6 +483,10 @@ class _RecordingScreenState extends State<RecordingScreen> {
         }
         _timer?.cancel();
         _timer = null;
+        _stopWindowTimer?.cancel();
+        _stopWindowTimer = null;
+        _timerRunning = false;
+        _waitingForStopDetection = false;
         if (!mounted) return;
         setState(() => _recording = false);
       }
@@ -732,7 +814,7 @@ class _RecordingScreenState extends State<RecordingScreen> {
         children: [
           CameraPreview(c),
           CustomPaint(painter: DetectionAreaPainter()),
-          if (_recording && _detectionTimer != null)
+          if (_recording && !_timerRunning)
             Positioned(
               bottom: 20,
               right: 20,
@@ -741,23 +823,53 @@ class _RecordingScreenState extends State<RecordingScreen> {
                 decoration: BoxDecoration(
                     color: Colors.black54,
                     borderRadius: BorderRadius.circular(8)),
-                child: Text(
-                  'Mencari: ${_detectionTimerSeconds}s',
-                  style: const TextStyle(color: Colors.white, fontSize: 14),
+                child: const Text(
+                  'Menunggu pelari...',
+                  style: TextStyle(color: Colors.white, fontSize: 14),
                 ),
               ),
             ),
-          if (_isPoseDetected)
+          if (_timerRunning && _waitingForStopDetection)
             Positioned(
               bottom: 20,
               right: 20,
               child: Container(
                 padding: const EdgeInsets.all(8),
                 decoration: BoxDecoration(
-                    color: Colors.green.withValues(alpha: 0.7),
+                    color: Colors.orange.withValues(alpha: 0.85),
+                    borderRadius: BorderRadius.circular(8)),
+                child: const Text(
+                  'Menunggu 5s...',
+                  style: TextStyle(color: Colors.white, fontSize: 14),
+                ),
+              ),
+            ),
+          if (_timerRunning && !_waitingForStopDetection)
+            Positioned(
+              bottom: 20,
+              right: 20,
+              child: Container(
+                padding: const EdgeInsets.all(8),
+                decoration: BoxDecoration(
+                    color: Colors.green.withValues(alpha: 0.85),
+                    borderRadius: BorderRadius.circular(8)),
+                child: const Text(
+                  'Timer berjalan',
+                  style: TextStyle(color: Colors.white, fontSize: 14),
+                ),
+              ),
+            ),
+          if (!_timerRunning && !_recording && _seconds > 0)
+            Positioned(
+              bottom: 20,
+              right: 20,
+              child: Container(
+                padding: const EdgeInsets.all(8),
+                decoration: BoxDecoration(
+                    color: Colors.blue.withValues(alpha: 0.85),
                     borderRadius: BorderRadius.circular(8)),
                 child: Text(
-                  'Ditemukan: ${_poseFoundTime}s',
+                  'Selesai: ${_fmt(_seconds)}',
                   style: const TextStyle(color: Colors.white, fontSize: 14),
                 ),
               ),
