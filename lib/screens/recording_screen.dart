@@ -165,6 +165,8 @@ class _RecordingScreenState extends State<RecordingScreen> {
       _cameraInitializing = true;
       _cameraError = null;
     });
+    // Reset _isBusy setiap kali kamera di-init ulang
+    _isBusy = false;
     final cam = await Permission.camera.status;
     final mic = await Permission.microphone.status;
     if (!cam.isGranted || !mic.isGranted) {
@@ -210,6 +212,8 @@ class _RecordingScreenState extends State<RecordingScreen> {
 
   Future<void> _switchCamera() async {
     await _cameraManager.dispose();
+    // Reset _isBusy agar stream baru bisa langsung memproses frame
+    _isBusy = false;
     setState(() {});
     final newIndex = (_selectedCameraIndex + 1) % _cameras.length;
     await _initCamera(cameraIndex: newIndex);
@@ -292,80 +296,86 @@ class _RecordingScreenState extends State<RecordingScreen> {
     }
     try {
       final List<Pose> poses = await _poseManager.processImage(inputImage);
+
+      // Bail out early jika widget sudah unmounted atau kamera sudah stop
+      if (!mounted) {
+        _isBusy = false;
+        return;
+      }
+
+      final sensorOrientation =
+          _cameraController?.description.sensorOrientation ?? 0;
+
+      // Hitung ukuran image sesuai orientasi sensor
+      final Size currentImageSize =
+          (sensorOrientation == 90 || sensorOrientation == 270)
+              ? Size(image.height.toDouble(), image.width.toDouble())
+              : Size(image.width.toDouble(), image.height.toDouble());
+
+      final bool isPersonDetected = poses.isNotEmpty;
+
+      // ── Cek apakah pose masuk/keluar bounding box ────────────────────────
+      // Gunakan currentImageSize (bukan _imageSize yang bisa masih null)
+      final bool poseInBox = isPersonDetected &&
+          _isPoseInBoundingBox(poses.first, currentImageSize);
+
+      if (poseInBox != _isPoseDetected) {
+        _isPoseDetected = poseInBox;
+        if (_isPoseDetected) {
+          // Pose baru masuk bounding box
+          if (!_timerRunning) {
+            _onPoseEntered();
+          } else if (_waitingForStopDetection) {
+            // Masih di window 5 detik → hentikan timer segera
+            _stopWindowTimer?.cancel();
+            _stopWindowTimer = null;
+            _waitingForStopDetection = false;
+            _stopTimer();
+            _addLog('Pelari terdeteksi di window 5s → Timer berhenti',
+                type: LogType.inference);
+          }
+        }
+      }
+
+      PoseLabel currentLabel = PoseLabel.unknown;
+
+      if (isPersonDetected && _analysisService.isLoaded) {
+        final pose = poses.first;
+        final result = _analysisService.classifyPose(pose);
+        currentLabel = result.label;
+
+        if (_recording) {
+          if (result.label == PoseLabel.bersedia) {
+            _bersediaScores.add(result.score);
+            if (result.score > _bestBersediaScore) {
+              _bestBersediaScore = result.score;
+              // Fire-and-forget: jangan await agar tidak memblokir stream
+              unawaited(_saveBestFrame(image, 'bersedia', result.score));
+            }
+          } else if (result.label == PoseLabel.berlari) {
+            _berlariScores.add(result.score);
+            if (result.score > _bestBerlariScore) {
+              _bestBerlariScore = result.score;
+              unawaited(_saveBestFrame(image, 'berlari', result.score));
+            }
+          }
+        }
+      }
+
       if (mounted) {
-        final sensorOrientation =
-            _cameraController?.description.sensorOrientation ?? 0;
-        final bool isPersonDetected = poses.isNotEmpty;
-
-        // ── Cek apakah pose masuk/keluar bounding box ──────────────────────
-        final bool poseInBox = isPersonDetected &&
-            _imageSize != null &&
-            _isPoseInBoundingBox(poses.first, _imageSize!);
-
-        if (poseInBox != _isPoseDetected) {
-          _isPoseDetected = poseInBox;
-          if (_isPoseDetected) {
-            // Pose baru masuk bounding box
-            if (!_timerRunning) {
-              // Timer belum berjalan → mulai timer
-              _onPoseEntered();
-            } else if (_waitingForStopDetection) {
-              // Timer sedang berjalan dan masih di window 5 detik,
-              // pose terdeteksi lagi → hentikan segera
-              _stopWindowTimer?.cancel();
-              _stopWindowTimer = null;
-              _waitingForStopDetection = false;
-              _stopTimer();
-              _addLog('Pelari terdeteksi di window 5s → Timer berhenti',
-                  type: LogType.inference);
-            }
-          }
-        }
-
-        PoseLabel currentLabel = PoseLabel.unknown;
-
-        if (isPersonDetected && _analysisService.isLoaded) {
-          final pose = poses.first;
-          final result = _analysisService.classifyPose(pose);
-          currentLabel = result.label;
-
-          if (_recording) {
-            // Accumulate scores per classified label
-            if (result.label == PoseLabel.bersedia) {
-              _bersediaScores.add(result.score);
-              if (result.score > _bestBersediaScore) {
-                _bestBersediaScore = result.score;
-                // Save best frame snapshot (captured via camera image bytes)
-                _saveBestFrame(image, 'bersedia', result.score);
-              }
-            } else if (result.label == PoseLabel.berlari) {
-              _berlariScores.add(result.score);
-              if (result.score > _bestBerlariScore) {
-                _bestBerlariScore = result.score;
-                _saveBestFrame(image, 'berlari', result.score);
-              }
-            }
-            // unknown frames are skipped (no score added)
-          }
-        }
-
         setState(() {
           _currentLabel = currentLabel;
           _detectedPose = isPersonDetected ? poses.first : null;
-          if (sensorOrientation == 90 || sensorOrientation == 270) {
-            _imageSize =
-                Size(image.height.toDouble(), image.width.toDouble());
-          } else {
-            _imageSize =
-                Size(image.width.toDouble(), image.height.toDouble());
-          }
+          _imageSize = currentImageSize;
         });
       }
-    } catch (e) {
-      debugPrint('Error processing image: $e');
+    } catch (e, stack) {
+      debugPrint('Error processing image: $e\n$stack');
       _addLog('Err: $e', isError: true);
+    } finally {
+      // Selalu reset _isBusy, apapun yang terjadi, agar stream tidak macet
+      _isBusy = false;
     }
-    _isBusy = false;
   }
 
   /// Cek apakah pose berada di dalam bounding box tengah layar (60% x 60%).
@@ -467,8 +477,20 @@ class _RecordingScreenState extends State<RecordingScreen> {
           _bestBerlariFramePath = null;
         });
       } else {
+        // Set _recording = false lebih dulu agar _processCameraImage
+        // tidak lagi mengakumulasi skor atau mengubah state timer
+        // sementara stopVideoRecording() masih berjalan
+        setState(() => _recording = false);
+        _timer?.cancel();
+        _timer = null;
+        _stopWindowTimer?.cancel();
+        _stopWindowTimer = null;
+        _timerRunning = false;
+        _waitingForStopDetection = false;
+
         if (c.value.isRecordingVideo) {
           final XFile file = await c.stopVideoRecording();
+          if (!mounted) return;
           final directory =
               Directory('/storage/emulated/0/Movies/Sprintify');
           if (!await directory.exists()) {
@@ -478,17 +500,10 @@ class _RecordingScreenState extends State<RecordingScreen> {
               'run_${DateTime.now().millisecondsSinceEpoch}.mp4';
           final targetPath = '${directory.path}/$fileName';
           final savedFile = await File(file.path).copy(targetPath);
+          if (!mounted) return;
           setState(() => _videoPath = savedFile.path);
           _addLog('Video disimpan di: $_videoPath', type: LogType.app);
         }
-        _timer?.cancel();
-        _timer = null;
-        _stopWindowTimer?.cancel();
-        _stopWindowTimer = null;
-        _timerRunning = false;
-        _waitingForStopDetection = false;
-        if (!mounted) return;
-        setState(() => _recording = false);
       }
     } catch (e) {
       _addLog('Rekaman/Penyimpanan gagal: $e', isError: true);
