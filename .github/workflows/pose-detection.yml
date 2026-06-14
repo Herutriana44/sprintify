@@ -1,0 +1,147 @@
+name: Pose Detection – Dataset
+
+on:
+  push:
+    paths:
+      # Jalankan otomatis bila ada gambar baru/berubah di folder dataset
+      - 'dataset/**'
+      - 'bin/detect_pose_ci.py'
+      - '.github/workflows/pose-detection.yml'
+  pull_request:
+    paths:
+      - 'dataset/**'
+  # Bisa dijalankan manual dari tab Actions
+  workflow_dispatch:
+    inputs:
+      dataset_folder:
+        description: 'Folder dataset relatif ke root repo'
+        required: false
+        default: 'dataset'
+
+jobs:
+  detect-pose:
+    name: Run Pose Detection on Dataset
+    runs-on: ubuntu-latest
+
+    steps:
+      # ── 1. Checkout repo ──────────────────────────────────────────────────
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      # ── 2. Setup Python ───────────────────────────────────────────────────
+      - name: Set up Python 3.11
+        uses: actions/setup-python@v5
+        with:
+          python-version: '3.11'
+
+      # ── 3. Cache pip dependencies ─────────────────────────────────────────
+      - name: Cache pip
+        uses: actions/cache@v4
+        with:
+          path: ~/.cache/pip
+          key: ${{ runner.os }}-pip-mediapipe-${{ hashFiles('**/detect_pose_ci.py') }}
+          restore-keys: |
+            ${{ runner.os }}-pip-mediapipe-
+
+      # ── 4. Install dependencies ───────────────────────────────────────────
+      - name: Install Python dependencies
+        run: |
+          pip install --upgrade pip
+          pip install \
+            mediapipe==0.10.14 \
+            opencv-python-headless==4.10.0.84 \
+            numpy==1.26.4
+
+      # ── 5. Validasi folder dataset ada ────────────────────────────────────
+      - name: Check dataset folder exists
+        run: |
+          DATASET="${{ github.event.inputs.dataset_folder || 'dataset' }}"
+          if [ ! -d "$DATASET" ]; then
+            echo "::error::Folder '$DATASET' tidak ditemukan di repository."
+            exit 1
+          fi
+          COUNT=$(find "$DATASET" -type f \( -iname "*.jpg" -o -iname "*.jpeg" -o -iname "*.png" -o -iname "*.bmp" -o -iname "*.webp" \) | wc -l)
+          echo "Ditemukan $COUNT gambar di folder $DATASET"
+          echo "DATASET_FOLDER=$DATASET" >> $GITHUB_ENV
+          echo "IMAGE_COUNT=$COUNT" >> $GITHUB_ENV
+
+      # ── 6. Jalankan deteksi pose ──────────────────────────────────────────
+      - name: Run pose detection
+        run: |
+          python bin/detect_pose_ci.py "$DATASET_FOLDER" output
+
+      # ── 7. Tampilkan summary di log ────────────────────────────────────────
+      - name: Print summary
+        if: always()
+        run: |
+          echo "========================================"
+          cat output/summary.txt
+          echo "========================================"
+          echo ""
+          echo "Annotated images:"
+          ls -lh output/annotated/ 2>/dev/null || echo "  (none)"
+          echo ""
+          echo "Vector files:"
+          ls -lh output/vectors/ 2>/dev/null || echo "  (none)"
+
+      # ── 8. Zip output agar artifact tidak melebihi batas jumlah file ─────────
+      - name: Zip output artifacts
+        if: always()
+        run: |
+          cd output
+          zip -r ../pose-annotated-images.zip annotated/ 2>/dev/null || true
+          zip -r ../pose-vectors.zip           vectors/  2>/dev/null || true
+          cd ..
+
+      # ── 9. Upload annotated images (zip) ──────────────────────────────────
+      - name: Upload annotated images
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: pose-annotated-images-${{ github.run_number }}
+          path: pose-annotated-images.zip
+          retention-days: 30
+          if-no-files-found: warn
+
+      # ── 10. Upload vector files (JSON + TXT, zip) ─────────────────────────
+      - name: Upload pose vectors
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: pose-vectors-${{ github.run_number }}
+          path: pose-vectors.zip
+          retention-days: 30
+          if-no-files-found: warn
+
+      # ── 11. Upload summary ─────────────────────────────────────────────────
+      - name: Upload summary report
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: pose-detection-summary-${{ github.run_number }}
+          path: output/summary.txt
+          retention-days: 30
+          if-no-files-found: warn
+
+      # ── 12. Buat GitHub Job Summary (tampil di UI Actions) ─────────────────
+      - name: Write job summary
+        if: always()
+        run: |
+          echo "## 🏃 Pose Detection Results" >> $GITHUB_STEP_SUMMARY
+          echo "" >> $GITHUB_STEP_SUMMARY
+          echo "| Property | Value |" >> $GITHUB_STEP_SUMMARY
+          echo "|----------|-------|" >> $GITHUB_STEP_SUMMARY
+          echo "| Dataset folder | \`$DATASET_FOLDER\` |" >> $GITHUB_STEP_SUMMARY
+          echo "| Total images | $IMAGE_COUNT |" >> $GITHUB_STEP_SUMMARY
+          echo "| Run number | ${{ github.run_number }} |" >> $GITHUB_STEP_SUMMARY
+          echo "| Commit | \`${{ github.sha }}\` |" >> $GITHUB_STEP_SUMMARY
+          echo "" >> $GITHUB_STEP_SUMMARY
+          echo "### Summary" >> $GITHUB_STEP_SUMMARY
+          echo '```' >> $GITHUB_STEP_SUMMARY
+          cat output/summary.txt >> $GITHUB_STEP_SUMMARY
+          echo '```' >> $GITHUB_STEP_SUMMARY
+          echo "" >> $GITHUB_STEP_SUMMARY
+          echo "### Artifacts" >> $GITHUB_STEP_SUMMARY
+          echo "- **pose-annotated-images-${{ github.run_number }}** — ZIP semua gambar dengan skeleton tergambar" >> $GITHUB_STEP_SUMMARY
+          echo "- **pose-vectors-${{ github.run_number }}** — ZIP koordinat landmark (.json + .txt per gambar)" >> $GITHUB_STEP_SUMMARY
+          echo "- **pose-detection-summary-${{ github.run_number }}** — Ringkasan per-file (TXT)" >> $GITHUB_STEP_SUMMARY
