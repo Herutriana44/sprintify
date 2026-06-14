@@ -1,6 +1,8 @@
 import 'dart:async';
 import 'dart:isolate';
 
+import 'package:google_mlkit_pose_detection/google_mlkit_pose_detection.dart';
+
 import 'pose_classifier.dart';
 
 // ---------------------------------------------------------------------------
@@ -87,12 +89,12 @@ void _isolateEntry(SendPort mainSendPort) {
 /// Long-lived isolate untuk menjalankan [PoseClassifier] di thread terpisah.
 ///
 /// Pipeline:
-///   Main isolate                     Classifier isolate
-///   ─────────────────────────────    ─────────────────────────
-///   ML Kit deteksi pose          →   (tidak dipakai)
-///   serialize landmarks          →   classifyFromMap()
-///   await Future result          ←   kirim ClassifyResult
-///   update UI
+///   Main isolate                       Classifier isolate
+///   ───────────────────────────────    ────────────────────────
+///   ML Kit deteksi pose landmarks  →   (tidak dipakai)
+///   serializePoseLandmarks()       →   classifyFromMap()
+///   await Future<ClassifyResult>   ←   kirim ClassifyResult
+///   update UI / accumulate scores
 class ClassifierIsolate {
   Isolate? _isolate;
   SendPort? _sendPort;
@@ -127,8 +129,8 @@ class ClassifierIsolate {
     return readyCompleter.future;
   }
 
-  /// Kirim [pose] ke isolate untuk diklasifikasi.
-  /// Mengembalikan [Future] yang akan selesai saat isolate mengirim hasilnya.
+  /// Kirim landmarks terserialisasi ke isolate untuk diklasifikasi.
+  /// Gunakan [serializePoseLandmarks] untuk mengkonversi Pose ML Kit terlebih dahulu.
   Future<ClassifyResult> classify(
       Map<String, Map<String, double>> serializedLandmarks) {
     assert(_ready, 'ClassifierIsolate.start() belum dipanggil');
@@ -168,20 +170,22 @@ class ClassifierIsolate {
 
 // ---------------------------------------------------------------------------
 // Helper: serialisasi Pose ML Kit → Map plain-Dart
-// (top-level agar bisa dipakai dari mana saja tanpa import google_mlkit)
+// Dipakai di main isolate sebelum mengirim data ke classifier isolate.
 // ---------------------------------------------------------------------------
 
-/// Ubah landmark [PoseLandmarkType → PoseLandmark] ke Map plain-Dart
-/// yang bisa dikirim via SendPort ke isolate lain.
+/// Ubah landmarks Pose ML Kit ke Map plain-Dart yang bisa dikirim via SendPort.
+/// Menggunakan [PoseClassifier.landmarkTypeToString] untuk mapping key.
 Map<String, Map<String, double>> serializePoseLandmarks(
-    Map<dynamic, dynamic> landmarks) {
+    Map<PoseLandmarkType, PoseLandmark> landmarks) {
   final result = <String, Map<String, double>>{};
   for (final entry in landmarks.entries) {
-    // entry.key adalah PoseLandmarkType, .name menghasilkan string enum
-    result[entry.key.name as String] = {
-      'x': (entry.value.x as double),
-      'y': (entry.value.y as double),
-    };
+    final key = PoseClassifier.landmarkTypeToString(entry.key);
+    if (key != null) {
+      result[key] = {
+        'x': entry.value.x,
+        'y': entry.value.y,
+      };
+    }
   }
   return result;
 }

@@ -9,14 +9,11 @@ class FramePoseResult {
     required this.score,
   });
 
-  /// Label posisi yang terdeteksi pada frame ini.
   final PoseLabel label;
-
-  /// Skor kemiripan (0–100) terhadap referensi label yang terpilih.
   final double score;
 }
 
-/// Modul klasifikasi pose berdasarkan data referensi JSON.
+/// Klasifikasi pose berdasarkan data referensi JSON.
 ///
 /// Cara kerja:
 /// 1. Hitung skor Euclidean terhadap semua landmark referensi untuk
@@ -31,24 +28,17 @@ class PoseClassifier {
 
   static const double _defaultThreshold = 45.0;
 
-  /// Klasifikasi [pose] ML Kit ke dalam salah satu [PoseLabel].
-  /// Dipakai di main isolate.
+  // ---------------------------------------------------------------------------
+  // Public API
+  // ---------------------------------------------------------------------------
+
+  /// Klasifikasi [pose] ML Kit — dipakai di main isolate.
   FramePoseResult classify(Pose pose) {
-    // Serialisasi ke Map plain-Dart lalu delegasikan ke classifyFromMap
-    final map = <String, Map<String, double>>{};
-    for (final entry in pose.landmarks.entries) {
-      map[entry.key.name] = {
-        'x': entry.value.x,
-        'y': entry.value.y,
-      };
-    }
-    return classifyFromMap(map);
+    return classifyFromMap(_landmarksToMap(pose));
   }
 
-  /// Klasifikasi dari Map plain-Dart landmark.
-  /// Bisa dipakai di dalam isolate (tidak bergantung pada ML Kit object).
-  FramePoseResult classifyFromMap(
-      Map<String, Map<String, double>> landmarks) {
+  /// Klasifikasi dari Map plain-Dart — dipakai di dalam classifier isolate.
+  FramePoseResult classifyFromMap(Map<String, Map<String, double>> landmarks) {
     double bestScore = -1;
     PoseLabel bestLabel = PoseLabel.unknown;
 
@@ -77,24 +67,31 @@ class PoseClassifier {
     );
   }
 
-  /// Hitung skor (0–100) kemiripan pose dengan data referensi landmark.
+  /// Skor kemiripan (0–100) antara [pose] dan referensi [referenceKey].
   double scoreAgainstReference(Pose pose, String referenceKey) {
     final ref = _refs[referenceKey];
     if (ref == null) return 0.0;
     final landmarksRef = ref['landmarks'] as Map<String, dynamic>?;
     if (landmarksRef == null) return 0.0;
-
-    final map = <String, Map<String, double>>{};
-    for (final entry in pose.landmarks.entries) {
-      map[entry.key.name] = {
-        'x': entry.value.x,
-        'y': entry.value.y,
-      };
-    }
-    return _computeScoreFromMap(map, landmarksRef);
+    return _computeScoreFromMap(_landmarksToMap(pose), landmarksRef);
   }
 
-  /// Skor dari Map plain-Dart (dipakai di isolate).
+  // ---------------------------------------------------------------------------
+  // Private helpers
+  // ---------------------------------------------------------------------------
+
+  /// Konversi Pose ML Kit → Map plain-Dart dengan key string sesuai JSON.
+  static Map<String, Map<String, double>> _landmarksToMap(Pose pose) {
+    final result = <String, Map<String, double>>{};
+    for (final entry in pose.landmarks.entries) {
+      final key = landmarkTypeToString(entry.key);
+      if (key != null) {
+        result[key] = {'x': entry.value.x, 'y': entry.value.y};
+      }
+    }
+    return result;
+  }
+
   double _computeScoreFromMap(
     Map<String, Map<String, double>> detected,
     Map<String, dynamic> landmarksRef,
@@ -115,19 +112,53 @@ class PoseClassifier {
     }
 
     if (count == 0) return 0.0;
-
     final avgSqDist = totalSqDist / count;
-    return ((1.0 - (avgSqDist.clamp(0.0, 1.0))) * 100).clamp(0.0, 100.0);
+    return ((1.0 - avgSqDist.clamp(0.0, 1.0)) * 100).clamp(0.0, 100.0);
   }
 
   PoseLabel _labelFromString(String key) {
     switch (key) {
-      case 'bersedia':
-        return PoseLabel.bersedia;
-      case 'berlari':
-        return PoseLabel.berlari;
-      default:
-        return PoseLabel.unknown;
+      case 'bersedia': return PoseLabel.bersedia;
+      case 'berlari':  return PoseLabel.berlari;
+      default:         return PoseLabel.unknown;
+    }
+  }
+
+  // ---------------------------------------------------------------------------
+  // Static mapping PoseLandmarkType → JSON key string
+  // (public agar bisa dipakai di classifier_isolate.dart)
+  // ---------------------------------------------------------------------------
+
+  static String? landmarkTypeToString(PoseLandmarkType type) {
+    switch (type) {
+      case PoseLandmarkType.nose:           return 'nose';
+      case PoseLandmarkType.leftShoulder:   return 'left_shoulder';
+      case PoseLandmarkType.rightShoulder:  return 'right_shoulder';
+      case PoseLandmarkType.leftElbow:      return 'left_elbow';
+      case PoseLandmarkType.rightElbow:     return 'right_elbow';
+      case PoseLandmarkType.leftWrist:      return 'left_wrist';
+      case PoseLandmarkType.rightWrist:     return 'right_wrist';
+      case PoseLandmarkType.leftHip:        return 'left_hip';
+      case PoseLandmarkType.rightHip:       return 'right_hip';
+      case PoseLandmarkType.leftKnee:       return 'left_knee';
+      case PoseLandmarkType.rightKnee:      return 'right_knee';
+      case PoseLandmarkType.leftAnkle:      return 'left_ankle';
+      case PoseLandmarkType.rightAnkle:     return 'right_ankle';
+      case PoseLandmarkType.leftEar:        return 'left_ear';
+      case PoseLandmarkType.rightEar:       return 'right_ear';
+      case PoseLandmarkType.leftEye:        return 'left_eye';
+      case PoseLandmarkType.rightEye:       return 'right_eye';
+      case PoseLandmarkType.leftPinky:      return 'left_pinky';
+      case PoseLandmarkType.rightPinky:     return 'right_pinky';
+      case PoseLandmarkType.leftIndex:      return 'left_index';
+      case PoseLandmarkType.rightIndex:     return 'right_index';
+      case PoseLandmarkType.leftThumb:      return 'left_thumb';
+      case PoseLandmarkType.rightThumb:     return 'right_thumb';
+      case PoseLandmarkType.leftHeel:       return 'left_heel';
+      case PoseLandmarkType.rightHeel:      return 'right_heel';
+      case PoseLandmarkType.leftFootIndex:  return 'left_foot_index';
+      case PoseLandmarkType.rightFootIndex: return 'right_foot_index';
+      default:                              return null;
     }
   }
 }
