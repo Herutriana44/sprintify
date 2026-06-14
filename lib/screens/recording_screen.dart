@@ -57,6 +57,7 @@ class _RecordingScreenState extends State<RecordingScreen> {
   String? _cameraError;
 
   bool _isBusy = false;
+  int _nullFrameCount = 0;   // debug counter: berapa frame yang return null
   Pose? _detectedPose;
   Size? _imageSize;
 
@@ -89,6 +90,7 @@ class _RecordingScreenState extends State<RecordingScreen> {
     _stopWindowTimer?.cancel();
     _cameraManager.dispose();
     _poseManager.dispose();
+    _analysisService.dispose();
     super.dispose();
   }
 
@@ -291,9 +293,18 @@ class _RecordingScreenState extends State<RecordingScreen> {
   Future<void> _processCameraImage(CameraImage image) async {
     final inputImage = _cameraManager.inputImageFromCameraImage(image);
     if (inputImage == null) {
+      // Log sekali setiap 60 frame agar tidak spam
+      _nullFrameCount++;
+      if (_nullFrameCount % 60 == 1) {
+        debugPrint(
+            '[PoseDetect] inputImage null — format=${image.format.raw}, '
+            'planes=${image.planes.length}, '
+            'size=${image.width}x${image.height}');
+      }
       _isBusy = false;
       return;
     }
+    _nullFrameCount = 0;
     try {
       final List<Pose> poses = await _poseManager.processImage(inputImage);
 
@@ -341,7 +352,9 @@ class _RecordingScreenState extends State<RecordingScreen> {
 
       if (isPersonDetected && _analysisService.isLoaded) {
         final pose = poses.first;
-        final result = _analysisService.classifyPose(pose);
+
+        // Klasifikasi dijalankan di isolate terpisah — non-blocking main thread
+        final result = await _analysisService.classifyPoseAsync(pose);
         currentLabel = result.label;
 
         if (_recording) {
@@ -349,7 +362,6 @@ class _RecordingScreenState extends State<RecordingScreen> {
             _bersediaScores.add(result.score);
             if (result.score > _bestBersediaScore) {
               _bestBersediaScore = result.score;
-              // Fire-and-forget: jangan await agar tidak memblokir stream
               unawaited(_saveBestFrame(image, 'bersedia', result.score));
             }
           } else if (result.label == PoseLabel.berlari) {

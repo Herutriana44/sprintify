@@ -31,8 +31,24 @@ class PoseClassifier {
 
   static const double _defaultThreshold = 45.0;
 
-  /// Klasifikasi [pose] ke dalam salah satu [PoseLabel].
+  /// Klasifikasi [pose] ML Kit ke dalam salah satu [PoseLabel].
+  /// Dipakai di main isolate.
   FramePoseResult classify(Pose pose) {
+    // Serialisasi ke Map plain-Dart lalu delegasikan ke classifyFromMap
+    final map = <String, Map<String, double>>{};
+    for (final entry in pose.landmarks.entries) {
+      map[entry.key.name] = {
+        'x': entry.value.x,
+        'y': entry.value.y,
+      };
+    }
+    return classifyFromMap(map);
+  }
+
+  /// Klasifikasi dari Map plain-Dart landmark.
+  /// Bisa dipakai di dalam isolate (tidak bergantung pada ML Kit object).
+  FramePoseResult classifyFromMap(
+      Map<String, Map<String, double>> landmarks) {
     double bestScore = -1;
     PoseLabel bestLabel = PoseLabel.unknown;
 
@@ -43,19 +59,18 @@ class PoseClassifier {
       final landmarksRef = entry.value['landmarks'] as Map<String, dynamic>?;
       if (landmarksRef == null) continue;
 
-      final score = _computeScore(pose, landmarksRef);
-      final threshold = (entry.value['thresholds']?['min_score_to_classify']
-              as num?)
-          ?.toDouble() ?? _defaultThreshold;
+      final score = _computeScoreFromMap(landmarks, landmarksRef);
+      final threshold =
+          (entry.value['thresholds']?['min_score_to_classify'] as num?)
+                  ?.toDouble() ??
+              _defaultThreshold;
 
       if (score > bestScore) {
         bestScore = score;
-        // Only set label if above threshold
         bestLabel = score >= threshold ? label : PoseLabel.unknown;
       }
     }
 
-    // If no label passed threshold but we have a best score, keep unknown
     return FramePoseResult(
       label: bestLabel,
       score: bestScore < 0 ? 0 : bestScore,
@@ -68,33 +83,40 @@ class PoseClassifier {
     if (ref == null) return 0.0;
     final landmarksRef = ref['landmarks'] as Map<String, dynamic>?;
     if (landmarksRef == null) return 0.0;
-    return _computeScore(pose, landmarksRef);
+
+    final map = <String, Map<String, double>>{};
+    for (final entry in pose.landmarks.entries) {
+      map[entry.key.name] = {
+        'x': entry.value.x,
+        'y': entry.value.y,
+      };
+    }
+    return _computeScoreFromMap(map, landmarksRef);
   }
 
-  double _computeScore(Pose pose, Map<String, dynamic> landmarksRef) {
+  /// Skor dari Map plain-Dart (dipakai di isolate).
+  double _computeScoreFromMap(
+    Map<String, Map<String, double>> detected,
+    Map<String, dynamic> landmarksRef,
+  ) {
     double totalSqDist = 0.0;
     int count = 0;
 
     for (final entry in landmarksRef.entries) {
-      final landmarkType = _mapStringToLandmark(entry.key);
-      final detected = pose.landmarks[landmarkType];
-      if (detected == null) continue;
+      final lm = detected[entry.key];
+      if (lm == null) continue;
 
       final refX = (entry.value['x'] as num).toDouble();
       final refY = (entry.value['y'] as num).toDouble();
-
-      // Normalised coordinates are in 0-1 space for both detected & reference
-      final dx = detected.x - refX;
-      final dy = detected.y - refY;
+      final dx = lm['x']! - refX;
+      final dy = lm['y']! - refY;
       totalSqDist += dx * dx + dy * dy;
       count++;
     }
 
     if (count == 0) return 0.0;
 
-    // Average squared distance; max theoretical is ~2 (diagonal of unit square)
     final avgSqDist = totalSqDist / count;
-    // Map to 0–100 (clamp so it never goes negative)
     return ((1.0 - (avgSqDist.clamp(0.0, 1.0))) * 100).clamp(0.0, 100.0);
   }
 
@@ -106,39 +128,6 @@ class PoseClassifier {
         return PoseLabel.berlari;
       default:
         return PoseLabel.unknown;
-    }
-  }
-
-  PoseLandmarkType _mapStringToLandmark(String name) {
-    switch (name) {
-      case 'nose':
-        return PoseLandmarkType.nose;
-      case 'left_shoulder':
-        return PoseLandmarkType.leftShoulder;
-      case 'right_shoulder':
-        return PoseLandmarkType.rightShoulder;
-      case 'left_elbow':
-        return PoseLandmarkType.leftElbow;
-      case 'right_elbow':
-        return PoseLandmarkType.rightElbow;
-      case 'left_wrist':
-        return PoseLandmarkType.leftWrist;
-      case 'right_wrist':
-        return PoseLandmarkType.rightWrist;
-      case 'left_hip':
-        return PoseLandmarkType.leftHip;
-      case 'right_hip':
-        return PoseLandmarkType.rightHip;
-      case 'left_knee':
-        return PoseLandmarkType.leftKnee;
-      case 'right_knee':
-        return PoseLandmarkType.rightKnee;
-      case 'left_ankle':
-        return PoseLandmarkType.leftAnkle;
-      case 'right_ankle':
-        return PoseLandmarkType.rightAnkle;
-      default:
-        return PoseLandmarkType.nose;
     }
   }
 }
