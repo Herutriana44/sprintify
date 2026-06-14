@@ -238,8 +238,6 @@ class _RecordingScreenState extends State<RecordingScreen> {
 
   // Berapa frame berturut-turut pose harus terdeteksi sebelum dianggap "masuk"
   static const int _poseDebounceFrames = 3;
-  int _poseDetectedStreak = 0;   // frame berturut-turut pose terdeteksi
-  int _poseMissingStreak  = 0;   // frame berturut-turut pose tidak terdeteksi
 
   /// Dipanggil dari _processCameraImage setiap frame dengan status pose terkini.
   void _handlePosePresence(bool poseInBox) {
