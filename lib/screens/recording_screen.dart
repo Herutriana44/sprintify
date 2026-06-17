@@ -241,8 +241,6 @@ class _RecordingScreenState extends State<RecordingScreen> {
 
   /// Dipanggil dari _processCameraImage setiap frame dengan status pose terkini.
   void _handlePosePresence(bool poseInBox) {
-    if (!_recording) return;
-
     if (poseInBox) {
       _poseDetectedStreak++;
       _poseMissingStreak = 0;
@@ -251,13 +249,13 @@ class _RecordingScreenState extends State<RecordingScreen> {
       _poseDetectedStreak = 0;
     }
 
-    // Update _isPoseDetected hanya setelah debounce terpenuhi
+    // Auto-start rekaman saat pose terdeteksi stabil
     if (_poseDetectedStreak >= _poseDebounceFrames && !_isPoseDetected) {
       _isPoseDetected = true;
-      if (!_timerRunning) {
-        _onPoseEntered();
+      if (!_recording) {
+        _addLog('Pose terdeteksi: Mulai rekaman otomatis.', type: LogType.inference);
+        _toggleVideoRecording();
       }
-      // Bila timer sudah jalan, _isPoseDetected dipakai oleh _scheduleStopWindow
     }
 
     if (_poseMissingStreak >= _poseDebounceFrames && _isPoseDetected) {
@@ -764,15 +762,6 @@ class _RecordingScreenState extends State<RecordingScreen> {
                     ),
                   Row(
                     children: [
-                      Expanded(
-                        child: FilledButton.tonal(
-                          onPressed:
-                              _cameraInitializing ? null : _toggle,
-                          child: Text(
-                              _recording ? 'Berhenti' : 'Mulai rekaman'),
-                        ),
-                      ),
-                      const SizedBox(width: 8),
                       IconButton(
                         onPressed: _recording ? null : _pickVideo,
                         icon: const Icon(Icons.photo_library),
