@@ -762,11 +762,23 @@ class _RecordingScreenState extends State<RecordingScreen> {
                     ),
                   Row(
                     children: [
-                      IconButton(
-                        onPressed: _recording ? null : _pickVideo,
-                        icon: const Icon(Icons.photo_library),
-                        tooltip: 'Pilih dari galeri',
-                      ),
+                      if (_recording)
+                        Expanded(
+                          child: FilledButton.tonal(
+                            onPressed: _toggleVideoRecording,
+                            style: FilledButton.styleFrom(
+                              backgroundColor: Theme.of(context).colorScheme.errorContainer,
+                              foregroundColor: Theme.of(context).colorScheme.onErrorContainer,
+                            ),
+                            child: const Text('Stop Rekaman'),
+                          ),
+                        ),
+                      if (!_recording)
+                        IconButton(
+                          onPressed: _pickVideo,
+                          icon: const Icon(Icons.photo_library),
+                          tooltip: 'Pilih dari galeri',
+                        ),
                       const SizedBox(width: 8),
                       Expanded(
                         child: FilledButton(
