@@ -1,4 +1,5 @@
 import 'dart:async';
+import 'dart:convert';
 import 'dart:io';
 
 import 'package:camera/camera.dart';
@@ -16,9 +17,11 @@ import '../models/test_mode.dart';
 import '../providers/t_smart_state.dart';
 import '../services/pose/pose_manager.dart';
 import '../services/pose/pose_classifier.dart';
+import '../services/pose/frame_saving_isolate.dart';
 import '../services/camera/camera_manager.dart';
 import '../services/logger_service.dart';
 import '../services/analysis/analysis_service.dart';
+import '../services/analysis/batch_frame_processor.dart';
 import 'assessment_waiting_screen.dart';
 
 class RecordingScreen extends StatefulWidget {
@@ -30,6 +33,8 @@ class RecordingScreen extends StatefulWidget {
 
 class _RecordingScreenState extends State<RecordingScreen> {
   final AnalysisService _analysisService = AnalysisService();
+  BatchFrameProcessor? _batchProcessor;
+  FrameSavingIsolate? _frameSavingIsolate;
 
   // Per-frame score accumulators
   final List<double> _bersediaScores = [];
@@ -80,10 +85,34 @@ class _RecordingScreenState extends State<RecordingScreen> {
   @override
   void initState() {
     super.initState();
-    _analysisService.loadReferencePoses();
+    _initializeProcessors();
     if (_isMobile) {
       _initCamera();
     }
+  }
+
+  Future<void> _initializeProcessors() async {
+    await _analysisService.loadReferencePoses();
+
+    // Initialize batch processor untuk parallel pose detection & classification
+    if (_analysisService.isLoaded) {
+      final referencePoses = await _loadReferencePosesData();
+      _batchProcessor = BatchFrameProcessor(
+        referencePoses: referencePoses,
+        poseDetectionPoolSize: 2, // 2 isolates untuk pose detection
+      );
+      await _batchProcessor!.initialize();
+      _addLog('Parallel processor initialized (2 worker isolates)', type: LogType.app);
+    }
+
+    // Initialize frame saving isolate untuk non-blocking I/O
+    _frameSavingIsolate = FrameSavingIsolate();
+    await _frameSavingIsolate!.start();
+  }
+
+  Future<Map<String, dynamic>> _loadReferencePosesData() async {
+    final String response = await rootBundle.loadString('assets/data/reference_poses.json');
+    return json.decode(response)['reference_poses'] as Map<String, dynamic>;
   }
 
   @override
@@ -93,6 +122,8 @@ class _RecordingScreenState extends State<RecordingScreen> {
     _cameraManager.dispose();
     _poseManager.dispose();
     _analysisService.dispose();
+    _batchProcessor?.dispose();
+    _frameSavingIsolate?.dispose();
     super.dispose();
   }
 
@@ -334,29 +365,13 @@ class _RecordingScreenState extends State<RecordingScreen> {
   // ---------------------------------------------------------------------------
 
   Future<void> _processCameraImage(CameraImage image) async {
-    final inputImage = _cameraManager.inputImageFromCameraImage(image);
-    if (inputImage == null) {
-      // Log sekali setiap 60 frame agar tidak spam
-      _nullFrameCount++;
-      if (_nullFrameCount % 60 == 1) {
-        debugPrint(
-            '[PoseDetect] inputImage null — format=${image.format.raw}, '
-            'planes=${image.planes.length}, '
-            'size=${image.width}x${image.height}');
-      }
+    if (_batchProcessor == null || !_batchProcessor!.isInitialized) {
       _isBusy = false;
       return;
     }
+
     _nullFrameCount = 0;
     try {
-      final List<Pose> poses = await _poseManager.processImage(inputImage);
-
-      // Bail out early jika widget sudah unmounted atau kamera sudah stop
-      if (!mounted) {
-        _isBusy = false;
-        return;
-      }
-
       final sensorOrientation =
           _cameraController?.description.sensorOrientation ?? 0;
 
@@ -366,37 +381,48 @@ class _RecordingScreenState extends State<RecordingScreen> {
               ? Size(image.height.toDouble(), image.width.toDouble())
               : Size(image.width.toDouble(), image.height.toDouble());
 
-      final bool isPersonDetected = poses.isNotEmpty;
+      // Process frame dengan batch processor (parallel pose detection + classification)
+      final result = await _batchProcessor!.processSingleFrame(
+        image: image,
+        metadata: CameraImageMetadata(
+          rotation: _cameraManager.getRotation(sensorOrientation),
+          sensorOrientation: sensorOrientation,
+        ),
+        frameIndex: 0,
+        timestamp: Duration.zero,
+      );
 
-      // ── Cek apakah pose masuk/keluar bounding box ────────────────────────
-      // Gunakan currentImageSize (bukan _imageSize yang bisa masih null)
+      // Bail out early jika widget sudah unmounted
+      if (!mounted) {
+        _isBusy = false;
+        return;
+      }
+
+      final bool isPersonDetected = result.poseDetected;
       final bool poseInBox = isPersonDetected &&
-          _isPoseInBoundingBox(poses.first, currentImageSize);
+          result.serializedLandmarks != null &&
+          _isPoseInBoundingBoxFromLandmarks(result.serializedLandmarks!, currentImageSize);
 
-      // Delegasikan ke mesin state dengan debounce — tidak pakai edge detection
+      // Delegasikan ke mesin state dengan debounce
       _handlePosePresence(poseInBox);
 
       PoseLabel currentLabel = PoseLabel.unknown;
 
-      if (isPersonDetected && _analysisService.isLoaded) {
-        final pose = poses.first;
-
-        // Klasifikasi dijalankan di isolate terpisah — non-blocking main thread
-        final result = await _analysisService.classifyPoseAsync(pose);
-        currentLabel = result.label;
+      if (result.classification != null) {
+        currentLabel = result.classification!.label;
 
         if (_recording) {
-          if (result.label == PoseLabel.bersedia) {
-            _bersediaScores.add(result.score);
-            if (result.score > _bestBersediaScore) {
-              _bestBersediaScore = result.score;
-              unawaited(_saveBestFrame(image, 'bersedia', result.score));
+          if (result.classification!.label == PoseLabel.bersedia) {
+            _bersediaScores.add(result.classification!.score);
+            if (result.classification!.score > _bestBersediaScore) {
+              _bestBersediaScore = result.classification!.score;
+              unawaited(_saveBestFrame(image, 'bersedia', result.classification!.score));
             }
-          } else if (result.label == PoseLabel.berlari) {
-            _berlariScores.add(result.score);
-            if (result.score > _bestBerlariScore) {
-              _bestBerlariScore = result.score;
-              unawaited(_saveBestFrame(image, 'berlari', result.score));
+          } else if (result.classification!.label == PoseLabel.berlari) {
+            _berlariScores.add(result.classification!.score);
+            if (result.classification!.score > _bestBerlariScore) {
+              _bestBerlariScore = result.classification!.score;
+              unawaited(_saveBestFrame(image, 'berlari', result.classification!.score));
             }
           }
         }
@@ -405,7 +431,7 @@ class _RecordingScreenState extends State<RecordingScreen> {
       if (mounted) {
         setState(() {
           _currentLabel = currentLabel;
-          _detectedPose = isPersonDetected ? poses.first : null;
+          _detectedPose = null; // Tidak perlu menyimpan Pose object, sudah diproses di isolate
           _imageSize = currentImageSize;
         });
       }
@@ -413,7 +439,6 @@ class _RecordingScreenState extends State<RecordingScreen> {
       debugPrint('Error processing image: $e\n$stack');
       _addLog('Err: $e', isError: true);
     } finally {
-      // Selalu reset _isBusy, apapun yang terjadi, agar stream tidak macet
       _isBusy = false;
     }
   }
@@ -446,24 +471,54 @@ class _RecordingScreenState extends State<RecordingScreen> {
         centerY <= boxBottom;
   }
 
-  /// Simpan frame terbaik sebagai JPEG ke direktori sementara.
+  /// Cek bounding box dari serialized landmarks (hasil dari isolate processing).
+  bool _isPoseInBoundingBoxFromLandmarks(
+    Map<String, Map<String, double>> landmarks,
+    Size imageSize,
+  ) {
+    if (landmarks.isEmpty) return false;
+
+    final boxLeft   = imageSize.width  * 0.20;
+    final boxTop    = imageSize.height * 0.20;
+    final boxRight  = imageSize.width  * 0.80;
+    final boxBottom = imageSize.height * 0.80;
+
+    double sumX = 0, sumY = 0;
+    int count = 0;
+    for (final lm in landmarks.values) {
+      sumX += lm['x']!;
+      sumY += lm['y']!;
+      count++;
+    }
+    if (count == 0) return false;
+    final centerX = sumX / count;
+    final centerY = sumY / count;
+
+    return centerX >= boxLeft &&
+        centerX <= boxRight &&
+        centerY >= boxTop &&
+        centerY <= boxBottom;
+  }
+
+  /// Simpan frame terbaik dengan non-blocking I/O di background isolate.
   Future<void> _saveBestFrame(
       CameraImage image, String label, double score) async {
+    if (_frameSavingIsolate == null) return;
+
     try {
-      // NV21 / BGRA8888 planes → save raw bytes as a JPEG placeholder.
-      // Full decode ke JPEG membutuhkan package image/dart:ui,
-      // untuk sementara kita simpan raw plane bytes saja dan tandai ekstensi .jpg
-      final dir = Directory('/storage/emulated/0/Movies/T-Smart/frames');
-      if (!await dir.exists()) await dir.create(recursive: true);
+      final result = await _frameSavingIsolate!.saveFrame(
+        frameBytes: image.planes.first.bytes,
+        label: label,
+        timestamp: DateTime.now().millisecondsSinceEpoch,
+        outputDir: '/storage/emulated/0/Movies/T-Smart/frames',
+      );
 
-      final path = '${dir.path}/best_${label}_${DateTime.now().millisecondsSinceEpoch}.jpg';
-      // Gunakan plane pertama (Y channel / BGRA) — cukup untuk Gemini vision
-      await File(path).writeAsBytes(image.planes.first.bytes);
-
-      if (label == 'bersedia') {
-        _bestBersediaFramePath = path;
-      } else {
-        _bestBerlariFramePath = path;
+      if (result.success && result.path != null) {
+        if (label == 'bersedia') {
+          _bestBersediaFramePath = result.path;
+        } else {
+          _bestBerlariFramePath = result.path;
+        }
       }
     } catch (e) {
       debugPrint('Gagal menyimpan best frame: $e');
