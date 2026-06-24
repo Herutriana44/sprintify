@@ -47,7 +47,7 @@ void _frameSavingIsolateEntry(SendPort mainSendPort) {
 
         mainSendPort.send(_SaveFrameResult(
           taskId: message.taskId,
-          result: const FrameSavingResult(success: true, path: path),
+          result: FrameSavingResult(success: true, path: path),
         ));
       } catch (e) {
         mainSendPort.send(_SaveFrameResult(
