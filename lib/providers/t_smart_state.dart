@@ -6,8 +6,8 @@ import '../models/performance_category.dart';
 import '../models/run_result.dart';
 import '../models/test_mode.dart';
 
-class SprintifyState extends ChangeNotifier {
-  SprintifyState() {
+class TSmartState extends ChangeNotifier {
+  TSmartState() {
     _athletes.addAll(_seedAthletes);
   }
 

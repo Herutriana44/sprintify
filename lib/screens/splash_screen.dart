@@ -3,7 +3,7 @@ import 'package:flutter/material.dart';
 import 'package:go_router/go_router.dart';
 import 'package:permission_handler/permission_handler.dart';
 
-import '../widgets/sprintify_logo.dart';
+import '../widgets/t_smart_logo.dart';
 
 class SplashScreen extends StatefulWidget {
   const SplashScreen({super.key});
@@ -53,7 +53,7 @@ class _SplashScreenState extends State<SplashScreen> {
           child: Column(
             mainAxisAlignment: MainAxisAlignment.center,
             children: [
-              const SprintifyLogo(size: 100),
+              const TSmartLogo(size: 100),
               const SizedBox(height: 48),
               SizedBox(
                 width: 120,

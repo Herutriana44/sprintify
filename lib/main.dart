@@ -3,7 +3,7 @@ import 'package:flutter_dotenv/flutter_dotenv.dart';
 import 'package:provider/provider.dart';
 
 import 'app.dart';
-import 'providers/sprintify_state.dart';
+import 'providers/t_smart_state.dart';
 
 Future<void> main() async {
   WidgetsFlutterBinding.ensureInitialized();
@@ -20,9 +20,9 @@ Future<void> main() async {
   }
 
   runApp(
-    ChangeNotifierProvider<SprintifyState>(
-      create: (_) => SprintifyState(),
-      child: const SprintifyApp(),
+    ChangeNotifierProvider<TSmartState>(
+      create: (_) => TSmartState(),
+      child: const TSmartApp(),
     ),
   );
 }

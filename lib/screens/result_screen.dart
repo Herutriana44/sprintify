@@ -3,7 +3,7 @@ import 'package:flutter/services.dart';
 import 'package:go_router/go_router.dart';
 import 'package:provider/provider.dart';
 
-import '../providers/sprintify_state.dart';
+import '../providers/t_smart_state.dart';
 import '../widgets/performance_chip.dart';
 
 class ResultScreen extends StatelessWidget {
@@ -11,7 +11,7 @@ class ResultScreen extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    final state = context.watch<SprintifyState>();
+    final state = context.watch<TSmartState>();
     final r = state.lastRunResult;
     if (r == null) {
       return Scaffold(

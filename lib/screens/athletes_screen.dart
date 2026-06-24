@@ -2,14 +2,14 @@ import 'package:flutter/material.dart';
 import 'package:go_router/go_router.dart';
 import 'package:provider/provider.dart';
 
-import '../providers/sprintify_state.dart';
+import '../providers/t_smart_state.dart';
 
 class AthletesScreen extends StatelessWidget {
   const AthletesScreen({super.key});
 
   @override
   Widget build(BuildContext context) {
-    final state = context.watch<SprintifyState>();
+    final state = context.watch<TSmartState>();
     final list = state.athletes;
 
     return Scaffold(

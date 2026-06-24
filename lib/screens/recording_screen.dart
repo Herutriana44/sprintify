@@ -13,7 +13,7 @@ import 'package:provider/provider.dart';
 
 import '../models/pending_analysis.dart';
 import '../models/test_mode.dart';
-import '../providers/sprintify_state.dart';
+import '../providers/t_smart_state.dart';
 import '../services/pose/pose_manager.dart';
 import '../services/pose/pose_classifier.dart';
 import '../services/camera/camera_manager.dart';
@@ -453,7 +453,7 @@ class _RecordingScreenState extends State<RecordingScreen> {
       // NV21 / BGRA8888 planes → save raw bytes as a JPEG placeholder.
       // Full decode ke JPEG membutuhkan package image/dart:ui,
       // untuk sementara kita simpan raw plane bytes saja dan tandai ekstensi .jpg
-      final dir = Directory('/storage/emulated/0/Movies/Sprintify/frames');
+      final dir = Directory('/storage/emulated/0/Movies/T-Smart/frames');
       if (!await dir.exists()) await dir.create(recursive: true);
 
       final path = '${dir.path}/best_${label}_${DateTime.now().millisecondsSinceEpoch}.jpg';
@@ -532,7 +532,7 @@ class _RecordingScreenState extends State<RecordingScreen> {
           final XFile file = await c.stopVideoRecording();
           if (!mounted) return;
           final directory =
-              Directory('/storage/emulated/0/Movies/Sprintify');
+              Directory('/storage/emulated/0/Movies/T-Smart');
           if (!await directory.exists()) {
             await directory.create(recursive: true);
           }
@@ -605,7 +605,7 @@ class _RecordingScreenState extends State<RecordingScreen> {
     );
 
     if (!mounted) return;
-    context.read<SprintifyState>().setPendingAnalysis(pending);
+    context.read<TSmartState>().setPendingAnalysis(pending);
 
     // Tutup loading dialog lalu navigasi
     Navigator.of(context, rootNavigator: true).pop();
@@ -618,7 +618,7 @@ class _RecordingScreenState extends State<RecordingScreen> {
 
   @override
   Widget build(BuildContext context) {
-    final state = context.watch<SprintifyState>();
+    final state = context.watch<TSmartState>();
     final athlete = state.selectedAthlete;
 
     return Scaffold(

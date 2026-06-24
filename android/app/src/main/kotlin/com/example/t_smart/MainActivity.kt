@@ -1,4 +1,4 @@
-package com.example.sprintify
+package com.example.t_smart
 
 import io.flutter.embedding.android.FlutterActivity
 

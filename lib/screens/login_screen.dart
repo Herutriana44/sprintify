@@ -1,7 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:go_router/go_router.dart';
 
-import '../widgets/sprintify_logo.dart';
+import '../widgets/t_smart_logo.dart';
 
 class LoginScreen extends StatefulWidget {
   const LoginScreen({super.key});
@@ -11,7 +11,7 @@ class LoginScreen extends StatefulWidget {
 }
 
 class _LoginScreenState extends State<LoginScreen> {
-  final _email = TextEditingController(text: 'pelatih@demo.sprintify');
+  final _email = TextEditingController(text: 'pelatih@demo.tsmart');
   final _password = TextEditingController(text: 'demo');
 
   @override
@@ -41,7 +41,7 @@ class _LoginScreenState extends State<LoginScreen> {
             crossAxisAlignment: CrossAxisAlignment.stretch,
             children: [
               const SizedBox(height: 24),
-              const SprintifyLogo(size: 72),
+              const TSmartLogo(size: 72),
               const SizedBox(height: 32),
               Text(
                 'Masuk',

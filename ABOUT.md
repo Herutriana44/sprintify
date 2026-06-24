@@ -1,4 +1,4 @@
-# Sprintify App
+# T-Smart App
 
 # Deskripsi
 Aplikasi yang dikembangkan merupakan sistem evaluasi kecepatan lari 60 meter berbasis mobile yang terintegrasi dengan perekaman video, analisis computer vision, serta sistem pendukung keputusan untuk memberikan penilaian dan rekomendasi latihan. Pengguna memulai dari halaman awal (splash screen) yang menampilkan identitas aplikasi, kemudian masuk melalui halaman login untuk mengakses sistem. Setelah berhasil masuk, pengguna diarahkan ke dashboard yang berfungsi sebagai pusat navigasi utama, menampilkan ringkasan aktivitas serta akses cepat untuk memulai tes lari atau melihat hasil sebelumnya. Pengguna terlebih dahulu mengelola data atlet atau siswa melalui halaman khusus yang menyediakan fitur penambahan, pengeditan, dan penyimpanan data sebagai subjek pengujian.

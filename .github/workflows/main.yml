@@ -42,9 +42,9 @@ jobs:
       - name: Rename APK
         run: |
           COMMIT_SHA=$(git rev-parse --short HEAD)
-          mv build/app/outputs/flutter-apk/app-release.apk build/app/outputs/flutter-apk/sprintify-$COMMIT_SHA.apk
+          mv build/app/outputs/flutter-apk/app-release.apk build/app/outputs/flutter-apk/t_smart-$COMMIT_SHA.apk
 
       - uses: actions/upload-artifact@v4
         with:
           name: app-release
-          path: build/app/outputs/flutter-apk/sprintify-*.apk
+          path: build/app/outputs/flutter-apk/t_smart-*.apk

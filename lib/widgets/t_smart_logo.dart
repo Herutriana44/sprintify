@@ -1,7 +1,7 @@
 import 'package:flutter/material.dart';
 
-class SprintifyLogo extends StatelessWidget {
-  const SprintifyLogo({super.key, this.size = 88});
+class TSmartLogo extends StatelessWidget {
+  const TSmartLogo({super.key, this.size = 88});
 
   final double size;
 
@@ -33,7 +33,7 @@ class SprintifyLogo extends StatelessWidget {
         ),
         const SizedBox(height: 12),
         Text(
-          'Sprintify',
+          'T-Smart',
           style: Theme.of(context).textTheme.headlineSmall?.copyWith(
                 fontWeight: FontWeight.w800,
                 letterSpacing: 0.5,

@@ -1,4 +1,4 @@
-# sprintify
+# T-Smart
 
 A new Flutter project.
 

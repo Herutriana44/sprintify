@@ -1,5 +1,5 @@
-name: sprintify
-description: "Sprintify — demo UI evaluasi lari 60m (tanpa backend)."
+name: t_smart
+description: "T-Smart — demo UI evaluasi lari 60m (tanpa backend)."
 # The following line prevents the package from being accidentally published to
 # pub.dev using `flutter pub publish`. This is preferred for private packages.
 publish_to: 'none' # Remove this line if you wish to publish to pub.dev

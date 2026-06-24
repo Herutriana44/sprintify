@@ -7,10 +7,10 @@ class FrameExtractor {
     final List<File> extractedFiles = [];
     
     final directory = await getExternalStorageDirectory();
-    final sprintifyDir = Directory('${directory!.path}/Pictures/Sprintify');
+    final tSmartDir = Directory('${directory!.path}/Pictures/T-Smart');
     
-    if (!await sprintifyDir.exists()) {
-      await sprintifyDir.create(recursive: true);
+    if (!await tSmartDir.exists()) {
+      await tSmartDir.create(recursive: true);
     }
 
     final random = Random();
@@ -26,7 +26,7 @@ class FrameExtractor {
 
     for (int i = 0; i < count; i++) {
       final fileName = 'frame_${random.nextInt(10000)}.png';
-      final file = File('${sprintifyDir.path}/$fileName');
+      final file = File('${tSmartDir.path}/$fileName');
       
       await file.writeAsBytes(pngHeader);
       extractedFiles.add(file);

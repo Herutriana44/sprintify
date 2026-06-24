@@ -3,7 +3,7 @@ import 'package:go_router/go_router.dart';
 import 'package:provider/provider.dart';
 
 import '../models/performance_category.dart';
-import '../providers/sprintify_state.dart';
+import '../providers/t_smart_state.dart';
 import '../widgets/summary_card.dart';
 
 class DashboardScreen extends StatelessWidget {
@@ -11,7 +11,7 @@ class DashboardScreen extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    final state = context.watch<SprintifyState>();
+    final state = context.watch<TSmartState>();
     final last = state.lastRunResult;
     final perf = last != null
         ? '${last.timeSeconds.toStringAsFixed(1)} d — ${last.category.label}'

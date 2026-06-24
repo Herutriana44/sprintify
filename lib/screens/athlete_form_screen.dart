@@ -3,7 +3,7 @@ import 'package:go_router/go_router.dart';
 import 'package:provider/provider.dart';
 
 import '../models/athlete.dart';
-import '../providers/sprintify_state.dart';
+import '../providers/t_smart_state.dart';
 
 class AthleteFormScreen extends StatefulWidget {
   const AthleteFormScreen({super.key, this.athleteId});
@@ -24,7 +24,7 @@ class _AthleteFormScreenState extends State<AthleteFormScreen> {
   @override
   void initState() {
     super.initState();
-    final state = context.read<SprintifyState>();
+    final state = context.read<TSmartState>();
     final existing =
         widget.athleteId != null ? state.getAthleteById(widget.athleteId!) : null;
     _name = TextEditingController(text: existing?.name ?? '');
@@ -43,7 +43,7 @@ class _AthleteFormScreenState extends State<AthleteFormScreen> {
 
   void _save() {
     if (!_formKey.currentState!.validate()) return;
-    final state = context.read<SprintifyState>();
+    final state = context.read<TSmartState>();
     final age = int.tryParse(_age.text.trim()) ?? 0;
     final className = _className.text.trim();
     if (widget.athleteId != null) {

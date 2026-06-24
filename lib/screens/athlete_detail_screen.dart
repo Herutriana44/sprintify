@@ -2,7 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:go_router/go_router.dart';
 import 'package:provider/provider.dart';
 
-import '../providers/sprintify_state.dart';
+import '../providers/t_smart_state.dart';
 
 class AthleteDetailScreen extends StatelessWidget {
   const AthleteDetailScreen({super.key, required this.athleteId});
@@ -11,7 +11,7 @@ class AthleteDetailScreen extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    final state = context.watch<SprintifyState>();
+    final state = context.watch<TSmartState>();
     final a = state.getAthleteById(athleteId);
     if (a == null) {
       return Scaffold(

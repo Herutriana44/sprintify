@@ -3,14 +3,14 @@ import 'package:flutter/services.dart';
 import 'package:go_router/go_router.dart';
 import 'package:provider/provider.dart';
 
-import '../providers/sprintify_state.dart';
+import '../providers/t_smart_state.dart';
 
 class AnalysisDetailScreen extends StatelessWidget {
   const AnalysisDetailScreen({super.key});
 
   @override
   Widget build(BuildContext context) {
-    final state = context.watch<SprintifyState>();
+    final state = context.watch<TSmartState>();
     final r = state.lastRunResult;
 
     return Scaffold(

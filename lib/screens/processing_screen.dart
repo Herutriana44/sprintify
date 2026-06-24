@@ -2,7 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:go_router/go_router.dart';
 import 'package:provider/provider.dart';
 
-import '../providers/sprintify_state.dart';
+import '../providers/t_smart_state.dart';
 import '../services/analysis/gemini_service.dart';
 import '../services/analysis/recommendation_service.dart';
 
@@ -133,7 +133,7 @@ class _ProcessingScreenState extends State<ProcessingScreen>
   // ---------------------------------------------------------------------------
 
   Future<void> _runPipeline() async {
-    final state = context.read<SprintifyState>();
+    final state = context.read<TSmartState>();
 
     // ── Step 0: Baca data rekaman ──────────────────────────────────────────
     _setStepRunning(0);

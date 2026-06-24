@@ -2,7 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:go_router/go_router.dart';
 import 'package:provider/provider.dart';
 
-import '../providers/sprintify_state.dart';
+import '../providers/t_smart_state.dart';
 import '../widgets/performance_chip.dart';
 
 class ResultsHistoryScreen extends StatelessWidget {
@@ -10,7 +10,7 @@ class ResultsHistoryScreen extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    final state = context.watch<SprintifyState>();
+    final state = context.watch<TSmartState>();
     final list = state.history;
 
     return Scaffold(

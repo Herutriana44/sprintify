@@ -4,7 +4,7 @@ import 'package:provider/provider.dart';
 
 import '../models/athlete.dart';
 import '../models/test_mode.dart';
-import '../providers/sprintify_state.dart';
+import '../providers/t_smart_state.dart';
 
 class TestPrepScreen extends StatefulWidget {
   const TestPrepScreen({super.key});
@@ -18,7 +18,7 @@ class _TestPrepScreenState extends State<TestPrepScreen> {
   void initState() {
     super.initState();
     WidgetsBinding.instance.addPostFrameCallback((_) {
-      final state = context.read<SprintifyState>();
+      final state = context.read<TSmartState>();
       final list = state.athletes;
       if (list.isEmpty) return;
       final sel = state.selectedAthlete;
@@ -30,7 +30,7 @@ class _TestPrepScreenState extends State<TestPrepScreen> {
 
   @override
   Widget build(BuildContext context) {
-    final state = context.watch<SprintifyState>();
+    final state = context.watch<TSmartState>();
     final athletes = state.athletes;
     final Athlete? selected = athletes.isEmpty
         ? null
@@ -97,7 +97,7 @@ class _TestPrepScreenState extends State<TestPrepScreen> {
                     )
                     .toList(),
                 onChanged: (a) {
-                  if (a != null) context.read<SprintifyState>().setSelectedAthlete(a);
+                  if (a != null) context.read<TSmartState>().setSelectedAthlete(a);
                 },
               ),
             const SizedBox(height: 24),
@@ -118,7 +118,7 @@ class _TestPrepScreenState extends State<TestPrepScreen> {
               selected: {state.testMode},
               onSelectionChanged: (Set<TestMode> next) {
                 if (next.isNotEmpty) {
-                  context.read<SprintifyState>().setTestMode(next.first);
+                  context.read<TSmartState>().setTestMode(next.first);
                 }
               },
             ),
@@ -156,7 +156,7 @@ class _TestPrepScreenState extends State<TestPrepScreen> {
               onPressed: athletes.isEmpty || selected == null
                   ? null
                   : () {
-                      context.read<SprintifyState>().setSelectedAthlete(selected);
+                      context.read<TSmartState>().setSelectedAthlete(selected);
                       context.push('/recording');
                     },
               child: const Text('Lanjut ke rekaman'),

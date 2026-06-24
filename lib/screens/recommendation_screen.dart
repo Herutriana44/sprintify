@@ -3,14 +3,14 @@ import 'package:go_router/go_router.dart';
 import 'package:provider/provider.dart';
 
 import '../models/performance_category.dart';
-import '../providers/sprintify_state.dart';
+import '../providers/t_smart_state.dart';
 
 class RecommendationScreen extends StatelessWidget {
   const RecommendationScreen({super.key});
 
   @override
   Widget build(BuildContext context) {
-    final state = context.watch<SprintifyState>();
+    final state = context.watch<TSmartState>();
     final r = state.lastRunResult;
 
     final recs = r == null
