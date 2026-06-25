@@ -63,7 +63,7 @@ class _RecordingScreenState extends State<RecordingScreen> {
 
   bool _isBusy = false;
   int _nullFrameCount = 0;   // debug counter: berapa frame yang return null
-  Pose? _detectedPose;
+  Map<String, Map<String, double>>? _detectedLandmarks;
   Size? _imageSize;
 
   // ── Timer logika baru ──────────────────────────────────────────────────────
@@ -431,7 +431,7 @@ class _RecordingScreenState extends State<RecordingScreen> {
       if (mounted) {
         setState(() {
           _currentLabel = currentLabel;
-          _detectedPose = null; // Tidak perlu menyimpan Pose object, sudah diproses di isolate
+          _detectedLandmarks = result.serializedLandmarks;
           _imageSize = currentImageSize;
         });
       }
@@ -998,9 +998,9 @@ class _RecordingScreenState extends State<RecordingScreen> {
                     backgroundColor: Colors.black45),
               ),
             ),
-          if (_detectedPose != null && _imageSize != null)
+          if (_detectedLandmarks != null && _imageSize != null)
             CustomPaint(
-                painter: PosePainter(_detectedPose!, _imageSize!)),
+                painter: SerializedPosePainter(_detectedLandmarks!, _imageSize!)),
         ],
       );
     }
@@ -1053,10 +1053,10 @@ class _ScoreChip extends StatelessWidget {
 // Painters
 // ---------------------------------------------------------------------------
 
-class PosePainter extends CustomPainter {
-  final Pose pose;
+class SerializedPosePainter extends CustomPainter {
+  final Map<String, Map<String, double>> landmarks;
   final Size imageSize;
-  PosePainter(this.pose, this.imageSize);
+  SerializedPosePainter(this.landmarks, this.imageSize);
 
   @override
   void paint(Canvas canvas, Size size) {
@@ -1065,14 +1065,16 @@ class PosePainter extends CustomPainter {
       ..strokeWidth = 4.0;
     final double scaleX = size.width / imageSize.width;
     final double scaleY = size.height / imageSize.height;
-    for (final landmark in pose.landmarks.values) {
+    for (final landmark in landmarks.values) {
+      final x = landmark['x']!;
+      final y = landmark['y']!;
       canvas.drawCircle(
-          Offset(landmark.x * scaleX, landmark.y * scaleY), 5.0, paint);
+          Offset(x * scaleX, y * scaleY), 5.0, paint);
     }
   }
 
   @override
-  bool shouldRepaint(PosePainter oldDelegate) => true;
+  bool shouldRepaint(SerializedPosePainter oldDelegate) => true;
 }
 
 class DetectionAreaPainter extends CustomPainter {
