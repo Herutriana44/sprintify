@@ -1058,18 +1058,66 @@ class SerializedPosePainter extends CustomPainter {
   final Size imageSize;
   SerializedPosePainter(this.landmarks, this.imageSize);
 
+  // Koneksi antar landmark untuk membentuk skeleton
+  static const Map<String, List<String>> _connections = {
+    'nose': ['left_eye', 'right_eye', 'left_ear', 'right_ear'],
+    'left_eye': ['left_ear'],
+    'right_eye': ['right_ear'],
+    'left_shoulder': ['right_shoulder', 'left_elbow', 'left_hip'],
+    'right_shoulder': ['right_elbow', 'right_hip'],
+    'left_elbow': ['left_wrist'],
+    'right_elbow': ['right_wrist'],
+    'left_hip': ['right_hip', 'left_knee'],
+    'right_hip': ['right_knee'],
+    'left_knee': ['left_ankle'],
+    'right_knee': ['right_ankle'],
+    'left_ankle': ['left_heel', 'left_foot_index'],
+    'right_ankle': ['right_heel', 'right_foot_index'],
+    'left_heel': ['left_foot_index'],
+    'right_heel': ['right_foot_index'],
+  };
+
   @override
   void paint(Canvas canvas, Size size) {
-    final paint = Paint()
-      ..color = Colors.green
-      ..strokeWidth = 4.0;
     final double scaleX = size.width / imageSize.width;
     final double scaleY = size.height / imageSize.height;
+
+    // Gambar koneksi antar landmark (skeleton)
+    final bonePaint = Paint()
+      ..color = Colors.blue
+      ..strokeWidth = 3.0
+      ..strokeCap = StrokeCap.round;
+
+    for (final entry in _connections.entries) {
+      final startKey = entry.key;
+      if (!landmarks.containsKey(startKey)) continue;
+
+      final start = landmarks[startKey]!;
+      final startX = start['x']! * scaleX;
+      final startY = start['y']! * scaleY;
+
+      for (final endKey in entry.value) {
+        if (!landmarks.containsKey(endKey)) continue;
+        final end = landmarks[endKey]!;
+        final endX = end['x']! * scaleX;
+        final endY = end['y']! * scaleY;
+
+        canvas.drawLine(
+          Offset(startX, startY),
+          Offset(endX, endY),
+          bonePaint,
+        );
+      }
+    }
+
+    // Gambar landmark (titik)
+    final pointPaint = Paint()
+      ..color = Colors.green
+      ..strokeWidth = 4.0;
     for (final landmark in landmarks.values) {
-      final x = landmark['x']!;
-      final y = landmark['y']!;
-      canvas.drawCircle(
-          Offset(x * scaleX, y * scaleY), 5.0, paint);
+      final x = landmark['x']! * scaleX;
+      final y = landmark['y']! * scaleY;
+      canvas.drawCircle(Offset(x, y), 5.0, pointPaint);
     }
   }
 
