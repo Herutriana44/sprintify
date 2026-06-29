@@ -66,6 +66,11 @@ class _RecordingScreenState extends State<RecordingScreen> {
   Map<String, Map<String, double>>? _detectedLandmarks;
   Size? _imageSize;
 
+  // Pose overlay state
+  bool _processorReady = false;
+  int _poseLostFrameCount = 0;
+  static const int _poseKeepAliveFrames = 10; // persist skeleton ~0.5-1 s setelah pose hilang
+
   // ── Timer logika baru ──────────────────────────────────────────────────────
   // State mesin timer: idle → running → waiting (5 detik setelah start)
   bool _isPoseDetected = false;
@@ -102,6 +107,7 @@ class _RecordingScreenState extends State<RecordingScreen> {
         poseDetectionPoolSize: 2, // 2 isolates untuk pose detection
       );
       await _batchProcessor!.initialize();
+      if (mounted) setState(() => _processorReady = true);
       _addLog('Parallel processor initialized (2 worker isolates)', type: LogType.app);
     }
 
@@ -428,11 +434,25 @@ class _RecordingScreenState extends State<RecordingScreen> {
         }
       }
 
+      // Hitung keep-alive agar skeleton tidak langsung hilang saat 1 frame gagal
+      if (result.serializedLandmarks != null) {
+        _poseLostFrameCount = 0;
+      } else {
+        _poseLostFrameCount++;
+      }
+
       if (mounted) {
         setState(() {
           _currentLabel = currentLabel;
-          _detectedLandmarks = result.serializedLandmarks;
           _imageSize = currentImageSize;
+          if (result.serializedLandmarks != null) {
+            // Pose terdeteksi: update landmarks
+            _detectedLandmarks = result.serializedLandmarks;
+          } else if (_poseLostFrameCount > _poseKeepAliveFrames) {
+            // Pose benar-benar hilang: hapus skeleton
+            _detectedLandmarks = null;
+          }
+          // else: pertahankan landmarks terakhir selama keep-alive aktif
         });
       }
     } catch (e, stack) {
@@ -998,9 +1018,44 @@ class _RecordingScreenState extends State<RecordingScreen> {
                     backgroundColor: Colors.black45),
               ),
             ),
+          // Overlay inisialisasi detektor
+          if (!_processorReady)
+            Positioned(
+              bottom: 60,
+              left: 0,
+              right: 0,
+              child: Center(
+                child: Container(
+                  padding: const EdgeInsets.symmetric(
+                      horizontal: 12, vertical: 6),
+                  decoration: BoxDecoration(
+                    color: Colors.black54,
+                    borderRadius: BorderRadius.circular(8),
+                  ),
+                  child: const Text(
+                    'Menginisialisasi detektor pose...',
+                    style: TextStyle(color: Colors.white, fontSize: 12),
+                  ),
+                ),
+              ),
+            ),
+          // Skeleton overlay pose detection
           if (_detectedLandmarks != null && _imageSize != null)
             CustomPaint(
-                painter: SerializedPosePainter(_detectedLandmarks!, _imageSize!)),
+              painter: SerializedPosePainter(
+                _detectedLandmarks!,
+                _imageSize!,
+                rotation: _cameras.isNotEmpty &&
+                        _selectedCameraIndex < _cameras.length
+                    ? _cameraManager.getRotation(
+                        _cameras[_selectedCameraIndex].sensorOrientation)
+                    : InputImageRotation.rotation90deg,
+                isFrontCamera: _cameras.isNotEmpty &&
+                    _selectedCameraIndex < _cameras.length &&
+                    _cameras[_selectedCameraIndex].lensDirection ==
+                        CameraLensDirection.front,
+              ),
+            ),
         ],
       );
     }
@@ -1056,7 +1111,15 @@ class _ScoreChip extends StatelessWidget {
 class SerializedPosePainter extends CustomPainter {
   final Map<String, Map<String, double>> landmarks;
   final Size imageSize;
-  SerializedPosePainter(this.landmarks, this.imageSize);
+  final InputImageRotation rotation;
+  final bool isFrontCamera;
+
+  SerializedPosePainter(
+    this.landmarks,
+    this.imageSize, {
+    this.rotation = InputImageRotation.rotation90deg,
+    this.isFrontCamera = false,
+  });
 
   // Koneksi antar landmark untuk membentuk skeleton
   static const Map<String, List<String>> _connections = {
@@ -1082,10 +1145,16 @@ class SerializedPosePainter extends CustomPainter {
     final double scaleX = size.width / imageSize.width;
     final double scaleY = size.height / imageSize.height;
 
+    // Kamera depan menampilkan preview yang di-mirror secara horizontal.
+    // Koordinat x dari ML Kit perlu di-flip agar skeleton selaras dengan tampilan.
+    double toX(double x) =>
+        isFrontCamera ? size.width - x * scaleX : x * scaleX;
+    double toY(double y) => y * scaleY;
+
     // Gambar koneksi antar landmark (skeleton)
     final bonePaint = Paint()
-      ..color = Colors.blue
-      ..strokeWidth = 3.0
+      ..color = Colors.cyan.withValues(alpha: 0.9)
+      ..strokeWidth = 4.0
       ..strokeCap = StrokeCap.round;
 
     for (final entry in _connections.entries) {
@@ -1093,18 +1162,16 @@ class SerializedPosePainter extends CustomPainter {
       if (!landmarks.containsKey(startKey)) continue;
 
       final start = landmarks[startKey]!;
-      final startX = start['x']! * scaleX;
-      final startY = start['y']! * scaleY;
+      final startX = toX(start['x']!);
+      final startY = toY(start['y']!);
 
       for (final endKey in entry.value) {
         if (!landmarks.containsKey(endKey)) continue;
         final end = landmarks[endKey]!;
-        final endX = end['x']! * scaleX;
-        final endY = end['y']! * scaleY;
 
         canvas.drawLine(
           Offset(startX, startY),
-          Offset(endX, endY),
+          Offset(toX(end['x']!), toY(end['y']!)),
           bonePaint,
         );
       }
@@ -1112,17 +1179,21 @@ class SerializedPosePainter extends CustomPainter {
 
     // Gambar landmark (titik)
     final pointPaint = Paint()
-      ..color = Colors.green
-      ..strokeWidth = 4.0;
+      ..color = Colors.yellow
+      ..style = PaintingStyle.fill;
     for (final landmark in landmarks.values) {
-      final x = landmark['x']! * scaleX;
-      final y = landmark['y']! * scaleY;
-      canvas.drawCircle(Offset(x, y), 5.0, pointPaint);
+      canvas.drawCircle(
+        Offset(toX(landmark['x']!), toY(landmark['y']!)),
+        6.0,
+        pointPaint,
+      );
     }
   }
 
   @override
-  bool shouldRepaint(SerializedPosePainter oldDelegate) => true;
+  bool shouldRepaint(SerializedPosePainter oldDelegate) =>
+      landmarks != oldDelegate.landmarks ||
+      isFrontCamera != oldDelegate.isFrontCamera;
 }
 
 class DetectionAreaPainter extends CustomPainter {
