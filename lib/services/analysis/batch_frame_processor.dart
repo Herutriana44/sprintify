@@ -1,15 +1,13 @@
 import 'dart:async';
-import 'dart:io';
-import 'dart:typed_data';
 
 import 'package:camera/camera.dart';
+import 'package:flutter/services.dart';
 import 'package:google_mlkit_pose_detection/google_mlkit_pose_detection.dart';
 
 import '../pose/pose_detection_isolate.dart';
 import '../pose/pose_classifier.dart';
 import '../pose/classifier_isolate.dart';
 
-/// Result dari processing satu frame.
 class FrameProcessingResult {
   const FrameProcessingResult({
     required this.frameIndex,
@@ -26,15 +24,10 @@ class FrameProcessingResult {
   final Map<String, Map<String, double>>? serializedLandmarks;
 }
 
-/// Service untuk batch processing video frames secara parallel.
 class BatchFrameProcessor {
-  BatchFrameProcessor({
-    required this.referencePoses,
-    this.poseDetectionPoolSize = 2,
-  });
+  BatchFrameProcessor({required this.referencePoses});
 
   final Map<String, dynamic> referencePoses;
-  final int poseDetectionPoolSize;
 
   PoseDetectionPool? _posePool;
   ClassifierIsolate? _classifierIsolate;
@@ -43,20 +36,15 @@ class BatchFrameProcessor {
   Future<void> initialize() async {
     if (_initialized) return;
 
-    // Initialize pose detection pool
-    _posePool = PoseDetectionPool(poolSize: poseDetectionPoolSize);
+    _posePool = PoseDetectionPool();
     await _posePool!.initialize();
 
-    // Initialize classifier isolate
     _classifierIsolate = ClassifierIsolate();
     await _classifierIsolate!.start(referencePoses);
 
     _initialized = true;
   }
 
-  /// Process batch CameraImage frames secara parallel.
-  ///
-  /// Mengembalikan Stream hasil processing untuk setiap frame.
   Stream<FrameProcessingResult> processCameraImageBatch(
     List<CameraImageFrame> frames, {
     int batchSize = 4,
@@ -69,19 +57,14 @@ class BatchFrameProcessor {
       final end = (i + batchSize < frames.length) ? i + batchSize : frames.length;
       final batch = frames.sublist(i, end);
 
-      // Convert CameraImage to PoseDetectionInput
       final inputs = <PoseDetectionInput>[];
       for (final frame in batch) {
         final input = _cameraImageToDetectionInput(frame.image, frame.metadata);
-        if (input != null) {
-          inputs.add(input);
-        }
+        if (input != null) inputs.add(input);
       }
 
-      // Detect poses in parallel
       final detectionResults = await _posePool!.detectPosesBatch(inputs);
 
-      // Classify poses in parallel
       for (int j = 0; j < detectionResults.length; j++) {
         final detection = detectionResults[j];
         final frame = batch[j];
@@ -109,7 +92,6 @@ class BatchFrameProcessor {
     }
   }
 
-  /// Process single CameraImage (untuk live camera stream).
   Future<FrameProcessingResult> processSingleFrame({
     required CameraImage image,
     required CameraImageMetadata metadata,
@@ -130,7 +112,6 @@ class BatchFrameProcessor {
       );
     }
 
-    // Detect pose
     final detection = await _posePool!.detectPoses(input);
 
     FramePoseResult? classification;
@@ -162,7 +143,6 @@ class BatchFrameProcessor {
     _initialized = false;
   }
 
-  // Helper: Convert CameraImage to PoseDetectionInput
   PoseDetectionInput? _cameraImageToDetectionInput(
     CameraImage image,
     CameraImageMetadata metadata,
@@ -170,7 +150,6 @@ class BatchFrameProcessor {
     final Uint8List bytes;
 
     if (Platform.isAndroid) {
-      // NV21 format
       if (image.planes.length == 1) {
         bytes = image.planes[0].bytes;
       } else if (image.planes.length >= 2) {
@@ -193,7 +172,6 @@ class BatchFrameProcessor {
         bytesPerRow: image.planes[0].bytesPerRow,
       );
     } else {
-      // iOS: BGRA8888
       if (image.planes.length != 1) return null;
       bytes = image.planes[0].bytes;
 
@@ -209,7 +187,6 @@ class BatchFrameProcessor {
   }
 }
 
-/// Wrapper untuk CameraImage dengan metadata.
 class CameraImageFrame {
   const CameraImageFrame({
     required this.index,
@@ -224,7 +201,6 @@ class CameraImageFrame {
   final CameraImageMetadata metadata;
 }
 
-/// Metadata untuk CameraImage processing.
 class CameraImageMetadata {
   const CameraImageMetadata({
     required this.rotation,

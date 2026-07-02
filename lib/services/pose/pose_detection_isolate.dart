@@ -1,14 +1,11 @@
 import 'dart:async';
-import 'dart:isolate';
 import 'dart:typed_data';
 import 'dart:ui';
 
 import 'package:google_mlkit_pose_detection/google_mlkit_pose_detection.dart';
 
-import '../isolate/isolate_pool.dart';
-
 // ---------------------------------------------------------------------------
-// Input/Output types untuk pose detection isolate
+// Input/Output types
 // ---------------------------------------------------------------------------
 
 class PoseDetectionInput {
@@ -39,132 +36,106 @@ class PoseDetectionOutput {
   final List<Map<String, Map<String, double>>> serializedLandmarks;
 }
 
-/// Serialized pose data yang bisa di-transfer antar isolate.
 class SerializedPose {
-  const SerializedPose({
-    required this.landmarks,
-  });
+  const SerializedPose({required this.landmarks});
 
   final Map<String, Map<String, double>> landmarks;
 }
 
 // ---------------------------------------------------------------------------
-// Isolate entry point
+// PoseDetectionPool — in-process async wrapper
+//
+// Catatan: google_mlkit_pose_detection memakai MethodChannel yang hanya bisa
+// diakses dari root isolate. Memindahkannya ke background isolate menyebabkan
+// error "BackgroundIsolateBinaryMessenger.instance value is invalid".
+// Karena PoseDetector.processImage() sudah asynchronous dan men-delegasikan
+// inference ke native side (tidak memblok UI thread), kita jalankan di
+// main isolate. Klasifikasi & file I/O tetap di background isolate.
 // ---------------------------------------------------------------------------
 
-void _poseDetectionIsolateEntry(SendPort mainSendPort) {
-  final receivePort = ReceivePort();
-  mainSendPort.send(receivePort.sendPort);
-
-  // Initialize pose detector di isolate ini
-  final poseDetector = PoseDetector(options: PoseDetectorOptions());
-
-  receivePort.listen((dynamic message) async {
-    if (message is IsolateTaskMessage<PoseDetectionInput>) {
-      try {
-        final input = message.input;
-
-        // Buat InputImage dari bytes
-        final inputImage = InputImage.fromBytes(
-          bytes: input.imageBytes,
-          metadata: InputImageMetadata(
-            size: Size(input.width.toDouble(), input.height.toDouble()),
-            rotation: input.rotation,
-            format: input.format,
-            bytesPerRow: input.bytesPerRow,
-          ),
-        );
-
-        // Detect poses
-        final poses = await poseDetector.processImage(inputImage);
-
-        // Serialize hasil
-        final serializedPoses = <SerializedPose>[];
-        final serializedLandmarks = <Map<String, Map<String, double>>>[];
-
-        for (final pose in poses) {
-          final landmarks = <String, Map<String, double>>{};
-          for (final entry in pose.landmarks.entries) {
-            final key = _landmarkTypeToString(entry.key);
-            if (key != null) {
-              landmarks[key] = {
-                'x': entry.value.x,
-                'y': entry.value.y,
-                'z': entry.value.z,
-              };
-            }
-          }
-          serializedPoses.add(SerializedPose(landmarks: landmarks));
-          serializedLandmarks.add(landmarks);
-        }
-
-        final output = PoseDetectionOutput(
-          poses: serializedPoses,
-          serializedLandmarks: serializedLandmarks,
-        );
-
-        mainSendPort.send(IsolateResponseMessage<PoseDetectionOutput>(
-          taskId: message.taskId,
-          result: output,
-        ));
-      } catch (e, stack) {
-        mainSendPort.send(IsolateErrorMessage(
-          taskId: message.taskId,
-          error: 'Pose detection error: $e\n$stack',
-        ));
-      }
-    }
-  });
-}
-
-// ---------------------------------------------------------------------------
-// Public API
-// ---------------------------------------------------------------------------
-
-/// Pool untuk parallel pose detection di multiple isolates.
 class PoseDetectionPool {
   PoseDetectionPool({this.poolSize = 2});
 
   final int poolSize;
-  late final IsolatePool<PoseDetectionInput, PoseDetectionOutput> _pool;
+  final PoseDetector _detector = PoseDetector(options: PoseDetectorOptions());
+  bool _initialized = false;
 
   Future<void> initialize() async {
-    _pool = IsolatePool<PoseDetectionInput, PoseDetectionOutput>(
-      workerEntryPoint: _poseDetectionIsolateEntry,
-      poolSize: poolSize,
+    _initialized = true;
+  }
+
+  Future<PoseDetectionOutput> detectPoses(PoseDetectionInput input) async {
+    if (!_initialized) {
+      throw StateError('PoseDetectionPool not initialized');
+    }
+
+    final inputImage = InputImage.fromBytes(
+      bytes: input.imageBytes,
+      metadata: InputImageMetadata(
+        size: Size(input.width.toDouble(), input.height.toDouble()),
+        rotation: input.rotation,
+        format: input.format,
+        bytesPerRow: input.bytesPerRow,
+      ),
     );
-    await _pool.initialize();
+
+    final poses = await _detector.processImage(inputImage);
+
+    final serializedPoses = <SerializedPose>[];
+    final serializedLandmarks = <Map<String, Map<String, double>>>[];
+
+    for (final pose in poses) {
+      final landmarks = <String, Map<String, double>>{};
+      for (final entry in pose.landmarks.entries) {
+        final key = _landmarkTypeToString(entry.key);
+        if (key != null) {
+          landmarks[key] = {
+            'x': entry.value.x,
+            'y': entry.value.y,
+            'z': entry.value.z,
+          };
+        }
+      }
+      serializedPoses.add(SerializedPose(landmarks: landmarks));
+      serializedLandmarks.add(landmarks);
+    }
+
+    return PoseDetectionOutput(
+      poses: serializedPoses,
+      serializedLandmarks: serializedLandmarks,
+    );
   }
 
-  /// Process single image untuk pose detection.
-  Future<PoseDetectionOutput> detectPoses(PoseDetectionInput input) {
-    return _pool.execute(input);
-  }
-
-  /// Process batch images secara parallel.
   Future<List<PoseDetectionOutput>> detectPosesBatch(
     List<PoseDetectionInput> inputs,
   ) {
-    return _pool.executeAll(inputs);
+    return Future.wait(inputs.map((input) => detectPoses(input)));
   }
 
-  /// Process stream of frames dengan batch processing.
   Stream<PoseDetectionOutput> detectPosesStream(
     List<PoseDetectionInput> inputs, {
     int batchSize = 4,
-  }) {
-    return _pool.executeBatch(inputs, batchSize: batchSize);
+  }) async* {
+    for (int i = 0; i < inputs.length; i += batchSize) {
+      final end = (i + batchSize < inputs.length) ? i + batchSize : inputs.length;
+      final batch = inputs.sublist(i, end);
+      final results = await detectPosesBatch(batch);
+      for (final result in results) {
+        yield result;
+      }
+    }
   }
 
-  bool get isInitialized => _pool.isInitialized;
+  bool get isInitialized => _initialized;
 
   void dispose() {
-    _pool.dispose();
+    _detector.close();
+    _initialized = false;
   }
 }
 
 // ---------------------------------------------------------------------------
-// Helper functions
+// Helper
 // ---------------------------------------------------------------------------
 
 String? _landmarkTypeToString(PoseLandmarkType type) {

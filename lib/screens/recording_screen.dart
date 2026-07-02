@@ -103,11 +103,10 @@ class _RecordingScreenState extends State<RecordingScreen> {
       final referencePoses = await _loadReferencePosesData();
       _batchProcessor = BatchFrameProcessor(
         referencePoses: referencePoses,
-        poseDetectionPoolSize: 2, // 2 isolates untuk pose detection
       );
       await _batchProcessor!.initialize();
       if (mounted) setState(() => _processorReady = true);
-      _addLog('Parallel processor initialized (2 worker isolates)', type: LogType.app);
+      _addLog('Batch processor initialized', type: LogType.app);
     }
 
     // Initialize frame saving isolate untuk non-blocking I/O
