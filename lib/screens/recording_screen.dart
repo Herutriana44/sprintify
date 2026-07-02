@@ -72,12 +72,11 @@ class _RecordingScreenState extends State<RecordingScreen> {
   int _poseLostFrameCount = 0;
   static const int _poseKeepAliveFrames = 10; // persist skeleton ~0.5-1 s setelah pose hilang
 
-  // ── Timer logika baru ──────────────────────────────────────────────────────
-  // State mesin timer: idle → running → waiting (5 detik setelah start)
+  // ── Timer logika ────────────────────────────────────────────────────────────
+  // Timer mulai LANGSUNG saat rekaman berjalan, dan berhenti saat rekaman
+  // dihentikan — tidak menunggu deteksi pelari lagi.
   bool _isPoseDetected = false;
   bool _timerRunning = false;            // apakah timer sedang berjalan
-  bool _waitingForStopDetection = false; // sedang di window 5 detik untuk stop
-  Timer? _stopWindowTimer;              // timer 5-detik setelah deteksi pertama
   int _poseDetectedStreak = 0;          // frame berturut-turut pose terdeteksi
   int _poseMissingStreak  = 0;          // frame berturut-turut pose tidak terdeteksi
 
@@ -161,7 +160,6 @@ class _RecordingScreenState extends State<RecordingScreen> {
   @override
   void dispose() {
     _timer?.cancel();
-    _stopWindowTimer?.cancel();
     _cameraManager.dispose();
     _analysisService.dispose();
     _batchProcessor?.dispose();
@@ -322,11 +320,14 @@ class _RecordingScreenState extends State<RecordingScreen> {
       _poseDetectedStreak = 0;
     }
 
-    // Auto-start rekaman saat pose terdeteksi stabil
+    // Auto-start rekaman saat pose terdeteksi stabil. Hanya dipicu sekali
+    // (selama belum ada video terekam) agar tidak memulai ulang otomatis
+    // setelah pengguna menekan Stop.
     if (_poseDetectedStreak >= _poseDebounceFrames && !_isPoseDetected) {
       _isPoseDetected = true;
-      if (!_recording) {
-        _addLog('Pose terdeteksi: Mulai rekaman otomatis.', type: LogType.inference);
+      if (!_recording && _videoPath == null) {
+        _addLog('Pelari terdeteksi: mulai rekaman & timer otomatis.',
+            type: LogType.inference);
         _toggleVideoRecording();
       }
     }
@@ -336,70 +337,46 @@ class _RecordingScreenState extends State<RecordingScreen> {
     }
   }
 
-  /// Dipanggil saat pose pertama kali stabil terdeteksi di bounding box.
-  void _onPoseEntered() {
-    if (!_recording || _timerRunning) return;
-
-    _timerRunning = true;
-    _seconds = 0;
+  /// Mulai timer detik. Dipanggil langsung saat rekaman dimulai sehingga
+  /// timer berjalan seketika tanpa menunggu deteksi pelari lagi.
+  void _startTimer() {
     _timer?.cancel();
+    _seconds = 0;
+    _timerRunning = true;
     _timer = Timer.periodic(const Duration(seconds: 1), (_) {
       if (!mounted) return;
       setState(() => _seconds++);
     });
-    _addLog('Pelari masuk → Timer mulai', type: LogType.inference);
-    _scheduleStopWindow();
-  }
-
-  /// Mulai countdown 5 detik. Saat habis:
-  ///   - pose masih ada → timer berhenti
-  ///   - pose hilang    → tunggu pose masuk lagi (idle kembali ke cek per-frame)
-  void _scheduleStopWindow() {
-    _stopWindowTimer?.cancel();
-    _waitingForStopDetection = true;
     if (mounted) setState(() {});
-
-    _stopWindowTimer = Timer(const Duration(seconds: 5), () {
-      if (!mounted) return;
-      _waitingForStopDetection = false;
-
-      if (_isPoseDetected && _timerRunning) {
-        // Pose masih ada setelah 5 detik → hentikan timer
-        _addLog('Pose terdeteksi setelah 5s → Timer berhenti',
-            type: LogType.inference);
-        _stopTimer();
-      } else {
-        // Pose hilang saat countdown habis → jadwalkan countdown baru
-        // supaya saat pose masuk lagi, timer langsung berhenti dalam 5s
-        _addLog('Pose hilang, timer terus berjalan...', type: LogType.inference);
-        _scheduleStopWindow();
-      }
-    });
   }
 
-  /// Hentikan timer.
+  /// Hentikan timer (dipanggil saat rekaman dihentikan).
   void _stopTimer() {
     _timer?.cancel();
     _timer = null;
     _timerRunning = false;
-    _waitingForStopDetection = false;
-    _stopWindowTimer?.cancel();
-    _stopWindowTimer = null;
     if (mounted) setState(() {});
   }
 
-  /// Reset semua state timer (saat rekaman dimulai ulang).
+  /// Reset semua state timer & deteksi (saat rekaman dimulai ulang).
   void _resetTimerState() {
     _timer?.cancel();
     _timer = null;
-    _stopWindowTimer?.cancel();
-    _stopWindowTimer = null;
     _timerRunning = false;
-    _waitingForStopDetection = false;
     _seconds = 0;
     _isPoseDetected = false;
     _poseDetectedStreak = 0;
     _poseMissingStreak  = 0;
+  }
+
+  /// Kosongkan akumulator skor & frame terbaik untuk sesi rekaman baru.
+  void _clearScores() {
+    _bersediaScores.clear();
+    _berlariScores.clear();
+    _bestBersediaScore = -1;
+    _bestBerlariScore = -1;
+    _bestBersediaFramePath = null;
+    _bestBerlariFramePath = null;
   }
 
   // ---------------------------------------------------------------------------
@@ -602,18 +579,17 @@ class _RecordingScreenState extends State<RecordingScreen> {
   void _toggleMockRecording() {
     setState(() {
       _recording = !_recording;
+      _resetTimerState();
       if (_recording) {
-        _resetTimerState();
-        _bersediaScores.clear();
-        _berlariScores.clear();
-        _bestBersediaScore = -1;
-        _bestBerlariScore = -1;
-        _bestBersediaFramePath = null;
-        _bestBerlariFramePath = null;
-      } else {
-        _resetTimerState();
+        _clearScores();
       }
     });
+    // Timer berjalan langsung saat mulai rekam (mode mock/tanpa kamera).
+    if (_recording) {
+      _startTimer();
+    } else {
+      _stopTimer();
+    }
   }
 
   Future<void> _toggleVideoRecording() async {
@@ -621,32 +597,26 @@ class _RecordingScreenState extends State<RecordingScreen> {
     if (c == null || !c.value.isInitialized) return;
     try {
       if (!_recording) {
-        await c.startVideoRecording();
+        // Mulai rekaman sambil menjaga aliran frame (pose detection tetap
+        // hidup lewat startVideoRecording(onAvailable:)).
+        await _cameraManager.startRecording();
         if (!mounted) return;
-        setState(() {
-          _recording = true;
-          _resetTimerState();
-          _bersediaScores.clear();
-          _berlariScores.clear();
-          _bestBersediaScore = -1;
-          _bestBerlariScore = -1;
-          _bestBersediaFramePath = null;
-          _bestBerlariFramePath = null;
-        });
+        _resetTimerState();
+        _clearScores();
+        setState(() => _recording = true);
+        // Timer LANGSUNG jalan begitu rekaman dimulai — tak perlu menunggu
+        // pelari terdeteksi lagi.
+        _startTimer();
+        _addLog('Rekaman dimulai — timer & deteksi berjalan.',
+            type: LogType.inference);
       } else {
         // Set _recording = false lebih dulu agar _processCameraImage
-        // tidak lagi mengakumulasi skor atau mengubah state timer
-        // sementara stopVideoRecording() masih berjalan
+        // tidak lagi mengakumulasi skor sementara stopRecording() berjalan.
         setState(() => _recording = false);
-        _timer?.cancel();
-        _timer = null;
-        _stopWindowTimer?.cancel();
-        _stopWindowTimer = null;
-        _timerRunning = false;
-        _waitingForStopDetection = false;
+        _stopTimer();
 
-        if (c.value.isRecordingVideo) {
-          final XFile file = await c.stopVideoRecording();
+        final XFile? file = await _cameraManager.stopRecording();
+        if (file != null) {
           if (!mounted) return;
           final directory =
               Directory('/storage/emulated/0/Movies/T-Smart');
@@ -664,6 +634,12 @@ class _RecordingScreenState extends State<RecordingScreen> {
       }
     } catch (e) {
       _addLog('Rekaman/Penyimpanan gagal: $e', isError: true);
+      // Pulihkan agar preview + pose detection tetap jalan meski rekaman gagal.
+      await _cameraManager.ensurePreviewStream();
+      if (mounted) {
+        setState(() => _recording = false);
+        _stopTimer();
+      }
     }
   }
 
@@ -1074,7 +1050,8 @@ class _RecordingScreenState extends State<RecordingScreen> {
         children: [
           CameraPreview(c),
           CustomPaint(painter: DetectionAreaPainter()),
-          if (_recording && !_timerRunning)
+          // Preview: menunggu pelari masuk area sebelum rekaman dimulai.
+          if (!_recording && _videoPath == null)
             Positioned(
               bottom: 20,
               right: 20,
@@ -1089,22 +1066,8 @@ class _RecordingScreenState extends State<RecordingScreen> {
                 ),
               ),
             ),
-          if (_timerRunning && _waitingForStopDetection)
-            Positioned(
-              bottom: 20,
-              right: 20,
-              child: Container(
-                padding: const EdgeInsets.all(8),
-                decoration: BoxDecoration(
-                    color: Colors.orange.withValues(alpha: 0.85),
-                    borderRadius: BorderRadius.circular(8)),
-                child: const Text(
-                  'Menunggu 5s...',
-                  style: TextStyle(color: Colors.white, fontSize: 14),
-                ),
-              ),
-            ),
-          if (_timerRunning && !_waitingForStopDetection)
+          // Rekaman berjalan: timer aktif.
+          if (_recording && _timerRunning)
             Positioned(
               bottom: 20,
               right: 20,

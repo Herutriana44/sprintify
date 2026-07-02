@@ -8,10 +8,16 @@ import 'package:google_mlkit_pose_detection/google_mlkit_pose_detection.dart';
 class CameraManager {
   CameraController? controller;
 
+  /// Callback frame yang dipakai baik saat preview (startImageStream) maupun
+  /// saat rekaman (startVideoRecording onAvailable). Disimpan agar bisa
+  /// dipasang ulang setiap kali sumber frame berpindah.
+  void Function(CameraImage)? _onImage;
+
   Future<void> initialize(
       CameraDescription description,
       void Function(CameraImage) onImage,
       ) async {
+    _onImage = onImage;
     controller = CameraController(
       description,
       ResolutionPreset.medium,
@@ -21,7 +27,55 @@ class CameraManager {
           : ImageFormatGroup.bgra8888,
     );
     await controller!.initialize();
-    controller!.startImageStream(onImage);
+    await controller!.startImageStream(onImage);
+  }
+
+  bool get isRecording => controller?.value.isRecordingVideo ?? false;
+
+  /// Mulai merekam video TANPA menghentikan aliran frame untuk pose detection.
+  ///
+  /// Plugin camera tidak boleh menjalankan startImageStream dan
+  /// startVideoRecording sekaligus, jadi stream preview dihentikan dulu lalu
+  /// frame dialirkan lewat parameter `onAvailable` milik startVideoRecording.
+  /// Dengan begitu deteksi pose, klasifikasi, dan skeleton tetap hidup selama
+  /// perekaman berlangsung (tidak membeku).
+  Future<void> startRecording() async {
+    final c = controller;
+    if (c == null || !c.value.isInitialized || c.value.isRecordingVideo) {
+      return;
+    }
+    if (c.value.isStreamingImages) {
+      await c.stopImageStream();
+    }
+    await c.startVideoRecording(onAvailable: _onImage);
+  }
+
+  /// Hentikan rekaman lalu kembalikan aliran frame preview agar deteksi pose
+  /// terus berjalan. Mengembalikan file video hasil rekaman (bila ada).
+  Future<XFile?> stopRecording() async {
+    final c = controller;
+    if (c == null) return null;
+    XFile? file;
+    if (c.value.isRecordingVideo) {
+      // stopVideoRecording juga menutup stream onAvailable secara internal.
+      file = await c.stopVideoRecording();
+    }
+    await ensurePreviewStream();
+    return file;
+  }
+
+  /// Pastikan stream preview aktif (dipakai untuk resume setelah rekaman atau
+  /// pemulihan bila memulai rekaman gagal), sehingga frame tetap mengalir ke
+  /// pose detection.
+  Future<void> ensurePreviewStream() async {
+    final c = controller;
+    if (c == null || !c.value.isInitialized) return;
+    if (c.value.isRecordingVideo) return; // frame datang via onAvailable
+    if (c.value.isStreamingImages) return; // sudah streaming
+    final cb = _onImage;
+    if (cb != null) {
+      await c.startImageStream(cb);
+    }
   }
 
   InputImageRotation getRotation(int sensorOrientation) {
@@ -103,5 +157,6 @@ class CameraManager {
   Future<void> dispose() async {
     await controller?.dispose();
     controller = null;
+    _onImage = null;
   }
 }
