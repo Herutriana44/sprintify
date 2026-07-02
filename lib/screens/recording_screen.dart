@@ -298,17 +298,18 @@ class _RecordingScreenState extends State<RecordingScreen> {
   // Timer logic: pose-triggered start/stop
   // ---------------------------------------------------------------------------
 
-  // Mesin state timer:
-  //   idle → (pose masuk box) → running → (5s berlalu, pose masih ada) → stopped
-  //
-  // Aturan:
-  //   1. Pose masuk bounding box saat idle   → mulai timer + mulai countdown 5s
-  //   2. Countdown 5s habis, pose masih ada  → timer berhenti
-  //   3. Countdown 5s habis, pose hilang     → jadwalkan ulang countdown 5s
-  //   4. Noise frame (flicker deteksi)       → DIABAIKAN, pakai debounce
+  // Alur otomatis:
+  //   1. Pose masuk bounding box saat idle              → mulai rekaman + timer
+  //   2. Timer berjalan; setelah > _autoStopMinSeconds  → arm deteksi stop
+  //   3. Saat armed, pose masuk bounding box lagi        → rekaman langsung stop
+  //   4. Noise frame (flicker deteksi)                   → diabaikan via debounce
 
   // Berapa frame berturut-turut pose harus terdeteksi sebelum dianggap "masuk"
   static const int _poseDebounceFrames = 3;
+
+  // Timer minimal (detik) sebelum deteksi pose di bounding box boleh
+  // menghentikan rekaman. Mencegah stop instan selagi pelari masih di area start.
+  static const int _autoStopMinSeconds = 5;
 
   /// Dipanggil dari _processCameraImage setiap frame dengan status pose terkini.
   void _handlePosePresence(bool poseInBox) {
@@ -318,6 +319,18 @@ class _RecordingScreenState extends State<RecordingScreen> {
     } else {
       _poseMissingStreak++;
       _poseDetectedStreak = 0;
+    }
+
+    // Auto-stop: setelah timer melewati _autoStopMinSeconds detik, bila pose
+    // stabil terdeteksi lagi di dalam bounding box (mis. pelari kembali/mencapai
+    // garis), hentikan rekaman seketika.
+    if (_recording &&
+        _seconds > _autoStopMinSeconds &&
+        _poseDetectedStreak >= _poseDebounceFrames) {
+      _addLog('Pose masuk area setelah ${_seconds}s → rekaman berhenti otomatis.',
+          type: LogType.inference);
+      _toggleVideoRecording();
+      return;
     }
 
     // Auto-start rekaman saat pose terdeteksi stabil. Hanya dipicu sekali
@@ -1066,8 +1079,8 @@ class _RecordingScreenState extends State<RecordingScreen> {
                 ),
               ),
             ),
-          // Rekaman berjalan: timer aktif.
-          if (_recording && _timerRunning)
+          // Rekaman berjalan: timer aktif (belum arm deteksi stop).
+          if (_recording && _timerRunning && _seconds <= _autoStopMinSeconds)
             Positioned(
               bottom: 20,
               right: 20,
@@ -1078,6 +1091,22 @@ class _RecordingScreenState extends State<RecordingScreen> {
                     borderRadius: BorderRadius.circular(8)),
                 child: const Text(
                   'Timer berjalan',
+                  style: TextStyle(color: Colors.white, fontSize: 14),
+                ),
+              ),
+            ),
+          // Rekaman berjalan & deteksi stop aktif: pose masuk area → berhenti.
+          if (_recording && _timerRunning && _seconds > _autoStopMinSeconds)
+            Positioned(
+              bottom: 20,
+              right: 20,
+              child: Container(
+                padding: const EdgeInsets.all(8),
+                decoration: BoxDecoration(
+                    color: Colors.orange.withValues(alpha: 0.9),
+                    borderRadius: BorderRadius.circular(8)),
+                child: const Text(
+                  'Deteksi finish aktif',
                   style: TextStyle(color: Colors.white, fontSize: 14),
                 ),
               ),
