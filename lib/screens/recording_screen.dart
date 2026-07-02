@@ -15,7 +15,7 @@ import 'package:provider/provider.dart';
 import '../models/pending_analysis.dart';
 import '../models/test_mode.dart';
 import '../providers/t_smart_state.dart';
-import '../services/pose/pose_manager.dart';
+
 import '../services/pose/pose_classifier.dart';
 import '../services/pose/frame_saving_isolate.dart';
 import '../services/camera/camera_manager.dart';
@@ -52,7 +52,6 @@ class _RecordingScreenState extends State<RecordingScreen> {
   Timer? _timer;
 
   final CameraManager _cameraManager = CameraManager();
-  final PoseManager _poseManager = PoseManager();
   final ImagePicker _picker = ImagePicker();
 
   CameraController? get _cameraController => _cameraManager.controller;
@@ -126,7 +125,6 @@ class _RecordingScreenState extends State<RecordingScreen> {
     _timer?.cancel();
     _stopWindowTimer?.cancel();
     _cameraManager.dispose();
-    _poseManager.dispose();
     _analysisService.dispose();
     _batchProcessor?.dispose();
     _frameSavingIsolate?.dispose();
@@ -381,13 +379,13 @@ class _RecordingScreenState extends State<RecordingScreen> {
       final sensorOrientation =
           _cameraController?.description.sensorOrientation ?? 0;
 
-      // Hitung ukuran image sesuai orientasi sensor
       final Size currentImageSize =
           (sensorOrientation == 90 || sensorOrientation == 270)
               ? Size(image.height.toDouble(), image.width.toDouble())
               : Size(image.width.toDouble(), image.height.toDouble());
 
       // Process frame dengan batch processor (parallel pose detection + classification)
+      // Timeout 5 detik untuk mencegah hang permanen
       final result = await _batchProcessor!.processSingleFrame(
         image: image,
         metadata: CameraImageMetadata(
@@ -396,9 +394,16 @@ class _RecordingScreenState extends State<RecordingScreen> {
         ),
         frameIndex: 0,
         timestamp: Duration.zero,
-      );
+      ).timeout(const Duration(seconds: 5), onTimeout: () {
+        _addLog('Frame processing timeout (5s)', isError: true);
+        return FrameProcessingResult(
+          frameIndex: 0,
+          timestamp: Duration.zero,
+          poseDetected: false,
+          classification: null,
+        );
+      });
 
-      // Bail out early jika widget sudah unmounted
       if (!mounted) {
         _isBusy = false;
         return;
@@ -409,7 +414,6 @@ class _RecordingScreenState extends State<RecordingScreen> {
           result.serializedLandmarks != null &&
           _isPoseInBoundingBoxFromLandmarks(result.serializedLandmarks!, currentImageSize);
 
-      // Delegasikan ke mesin state dengan debounce
       _handlePosePresence(poseInBox);
 
       PoseLabel currentLabel = PoseLabel.unknown;

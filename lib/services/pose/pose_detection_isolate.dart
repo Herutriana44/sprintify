@@ -60,7 +60,7 @@ void _poseDetectionIsolateEntry(SendPort mainSendPort) {
   final poseDetector = PoseDetector(options: PoseDetectorOptions());
 
   receivePort.listen((dynamic message) async {
-    if (message is _IsolateTask<PoseDetectionInput>) {
+    if (message is IsolateTaskMessage<PoseDetectionInput>) {
       try {
         final input = message.input;
 
@@ -103,12 +103,12 @@ void _poseDetectionIsolateEntry(SendPort mainSendPort) {
           serializedLandmarks: serializedLandmarks,
         );
 
-        mainSendPort.send(_IsolateResponse<PoseDetectionOutput>(
+        mainSendPort.send(IsolateResponseMessage<PoseDetectionOutput>(
           taskId: message.taskId,
           result: output,
         ));
       } catch (e, stack) {
-        mainSendPort.send(_IsolateError(
+        mainSendPort.send(IsolateErrorMessage(
           taskId: message.taskId,
           error: 'Pose detection error: $e\n$stack',
         ));
@@ -226,23 +226,4 @@ String? _landmarkTypeToString(PoseLandmarkType type) {
     default:
       return null;
   }
-}
-
-// Internal message types (reused from isolate_pool pattern)
-class _IsolateTask<I> {
-  _IsolateTask({required this.taskId, required this.input});
-  final int taskId;
-  final I input;
-}
-
-class _IsolateResponse<O> {
-  _IsolateResponse({required this.taskId, required this.result});
-  final int taskId;
-  final O result;
-}
-
-class _IsolateError {
-  _IsolateError({required this.taskId, required this.error});
-  final int taskId;
-  final Object error;
 }

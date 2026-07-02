@@ -28,10 +28,10 @@ class IsolateWorker<I, O> {
         _sendPort = message;
         _ready = true;
         completer.complete();
-      } else if (message is _IsolateResponse<O>) {
+      } else if (message is IsolateResponseMessage<O>) {
         _activeTasks--;
         _pendingTasks.remove(message.taskId)?.complete(message.result);
-      } else if (message is _IsolateError) {
+      } else if (message is IsolateErrorMessage) {
         _activeTasks--;
         _pendingTasks.remove(message.taskId)?.completeError(message.error);
       }
@@ -50,7 +50,7 @@ class IsolateWorker<I, O> {
     _pendingTasks[taskId] = completer;
     _activeTasks++;
 
-    _sendPort!.send(_IsolateTask<I>(taskId: taskId, input: input));
+    _sendPort!.send(IsolateTaskMessage<I>(taskId: taskId, input: input));
     return completer.future;
   }
 
@@ -156,23 +156,24 @@ class IsolatePool<I, O> {
 }
 
 // ---------------------------------------------------------------------------
-// Internal message types
+// Shared message types (public — dipakai antar isolate & main thread)
 // ---------------------------------------------------------------------------
 
-class _IsolateTask<I> {
-  _IsolateTask({required this.taskId, required this.input});
+class IsolateTaskMessage<I> {
+  IsolateTaskMessage({required this.taskId, required this.input});
   final int taskId;
   final I input;
 }
 
-class _IsolateResponse<O> {
-  _IsolateResponse({required this.taskId, required this.result});
+class IsolateResponseMessage<O> {
+  IsolateResponseMessage({required this.taskId, required this.result});
   final int taskId;
   final O result;
 }
 
-class _IsolateError {
-  _IsolateError({required this.taskId, required this.error});
+class IsolateErrorMessage {
+  IsolateErrorMessage({required this.taskId, required this.error});
   final int taskId;
   final Object error;
 }
+
