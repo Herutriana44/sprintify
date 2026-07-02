@@ -495,61 +495,36 @@ class _RecordingScreenState extends State<RecordingScreen> {
     }
   }
 
-  /// Cek apakah pose berada di dalam bounding box tengah layar (60% x 60%).
-  bool _isPoseInBoundingBox(Pose pose, Size imageSize) {
-    if (pose.landmarks.isEmpty) return false;
-
-    // Bounding box area: 60% dari lebar & tinggi gambar, di tengah
-    final boxLeft   = imageSize.width  * 0.20;
-    final boxTop    = imageSize.height * 0.20;
-    final boxRight  = imageSize.width  * 0.80;
-    final boxBottom = imageSize.height * 0.80;
-
-    // Hitung rata-rata koordinat landmark untuk menentukan posisi tubuh
-    double sumX = 0, sumY = 0;
-    int count = 0;
-    for (final lm in pose.landmarks.values) {
-      sumX += lm.x;
-      sumY += lm.y;
-      count++;
-    }
-    if (count == 0) return false;
-    final centerX = sumX / count;
-    final centerY = sumY / count;
-
-    return centerX >= boxLeft &&
-        centerX <= boxRight &&
-        centerY >= boxTop &&
-        centerY <= boxBottom;
-  }
+  // Area deteksi: 60% dari lebar & tinggi gambar, di tengah (selaras dengan
+  // DetectionAreaPainter yang menggambar kotak 0.6x di tengah).
+  static const double _boxMarginFraction = 0.20;
 
   /// Cek bounding box dari serialized landmarks (hasil dari isolate processing).
+  ///
+  /// Memicu TRUE begitu ADA SATU landmark saja yang masuk ke dalam area deteksi
+  /// — bukan menunggu titik tengah tubuh masuk. Dengan begitu aksi langsung
+  /// terpicu saat bagian kecil skeleton (mis. tangan/kaki terdepan) menyentuh
+  /// area, sesuai kebutuhan deteksi yang responsif.
   bool _isPoseInBoundingBoxFromLandmarks(
     Map<String, Map<String, double>> landmarks,
     Size imageSize,
   ) {
     if (landmarks.isEmpty) return false;
 
-    final boxLeft   = imageSize.width  * 0.20;
-    final boxTop    = imageSize.height * 0.20;
-    final boxRight  = imageSize.width  * 0.80;
-    final boxBottom = imageSize.height * 0.80;
+    final boxLeft   = imageSize.width  * _boxMarginFraction;
+    final boxTop    = imageSize.height * _boxMarginFraction;
+    final boxRight  = imageSize.width  * (1 - _boxMarginFraction);
+    final boxBottom = imageSize.height * (1 - _boxMarginFraction);
 
-    double sumX = 0, sumY = 0;
-    int count = 0;
     for (final lm in landmarks.values) {
-      sumX += lm['x']!;
-      sumY += lm['y']!;
-      count++;
+      final x = lm['x'];
+      final y = lm['y'];
+      if (x == null || y == null) continue;
+      if (x >= boxLeft && x <= boxRight && y >= boxTop && y <= boxBottom) {
+        return true; // cukup satu landmark di dalam area → langsung memicu
+      }
     }
-    if (count == 0) return false;
-    final centerX = sumX / count;
-    final centerY = sumY / count;
-
-    return centerX >= boxLeft &&
-        centerX <= boxRight &&
-        centerY >= boxTop &&
-        centerY <= boxBottom;
+    return false;
   }
 
   /// Simpan frame terbaik dengan non-blocking I/O di background isolate.
