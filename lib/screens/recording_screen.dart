@@ -67,6 +67,8 @@ class _RecordingScreenState extends State<RecordingScreen> {
 
   // Pose overlay state
   bool _processorReady = false;
+  String _initStatusMessage = 'Memulai inisialisasi...';
+  String? _initError;
   int _poseLostFrameCount = 0;
   static const int _poseKeepAliveFrames = 10; // persist skeleton ~0.5-1 s setelah pose hilang
 
@@ -96,22 +98,59 @@ class _RecordingScreenState extends State<RecordingScreen> {
   }
 
   Future<void> _initializeProcessors() async {
-    await _analysisService.loadReferencePoses();
+    try {
+      // Stage 1: load reference poses via analysis service
+      if (mounted) {
+        setState(() => _initStatusMessage = 'Memuat data referensi pose...');
+      }
+      await _analysisService.loadReferencePoses();
 
-    // Initialize batch processor untuk parallel pose detection & classification
-    if (_analysisService.isLoaded) {
+      if (!_analysisService.isLoaded) {
+        throw Exception('Gagal memuat data referensi pose');
+      }
+
+      // Stage 2: parse reference poses JSON
+      if (mounted) {
+        setState(() =>
+            _initStatusMessage = 'Memuat konfigurasi referensi pose...');
+      }
       final referencePoses = await _loadReferencePosesData();
+
+      // Stage 3: spin up batch processor (pose detection isolates + classifier)
+      if (mounted) {
+        setState(() => _initStatusMessage =
+            'Menginisialisasi threading isolate pose detection...');
+      }
       _batchProcessor = BatchFrameProcessor(
         referencePoses: referencePoses,
       );
       await _batchProcessor!.initialize();
-      if (mounted) setState(() => _processorReady = true);
       _addLog('Batch processor initialized', type: LogType.app);
-    }
 
-    // Initialize frame saving isolate untuk non-blocking I/O
-    _frameSavingIsolate = FrameSavingIsolate();
-    await _frameSavingIsolate!.start();
+      // Stage 4: frame saving isolate untuk non-blocking I/O
+      if (mounted) {
+        setState(() =>
+            _initStatusMessage = 'Menyiapkan penyimpan frame...');
+      }
+      _frameSavingIsolate = FrameSavingIsolate();
+      await _frameSavingIsolate!.start();
+
+      // All isolates ready → unlock recording mode
+      if (mounted) {
+        setState(() {
+          _initStatusMessage = 'Siap merekam';
+          _processorReady = true;
+        });
+      }
+      _addLog('Inisialisasi selesai. Mode perekaman aktif.',
+          type: LogType.app);
+    } catch (e, stack) {
+      debugPrint('Init error: $e\n$stack');
+      if (mounted) {
+        setState(() => _initError = e.toString());
+      }
+      _addLog('Inisialisasi gagal: $e', isError: true);
+    }
   }
 
   Future<Map<String, dynamic>> _loadReferencePosesData() async {
@@ -694,8 +733,93 @@ class _RecordingScreenState extends State<RecordingScreen> {
   // Build
   // ---------------------------------------------------------------------------
 
+  /// Layar loading full-screen selama inisialisasi batch pose detection
+  /// (threading isolate) berlangsung. Perekaman baru dibuka setelah selesai.
+  Widget _buildInitializationScreen(BuildContext context) {
+    final scheme = Theme.of(context).colorScheme;
+    final hasError = _initError != null;
+
+    return Scaffold(
+      appBar: AppBar(title: const Text('Rekaman')),
+      body: SafeArea(
+        child: Center(
+          child: Padding(
+            padding: const EdgeInsets.symmetric(horizontal: 32),
+            child: Column(
+              mainAxisAlignment: MainAxisAlignment.center,
+              children: [
+                if (hasError) ...[
+                  Icon(Icons.error_outline, size: 56, color: scheme.error),
+                  const SizedBox(height: 24),
+                  Text(
+                    'Inisialisasi gagal',
+                    style: Theme.of(context).textTheme.titleMedium?.copyWith(
+                        fontWeight: FontWeight.w600, color: scheme.error),
+                    textAlign: TextAlign.center,
+                  ),
+                  const SizedBox(height: 8),
+                  Text(
+                    _initError!,
+                    style: Theme.of(context).textTheme.bodySmall,
+                    textAlign: TextAlign.center,
+                  ),
+                  const SizedBox(height: 24),
+                  FilledButton.icon(
+                    onPressed: () {
+                      setState(() {
+                        _initError = null;
+                        _initStatusMessage = 'Memulai inisialisasi...';
+                      });
+                      _initializeProcessors();
+                    },
+                    icon: const Icon(Icons.refresh),
+                    label: const Text('Coba lagi'),
+                  ),
+                ] else ...[
+                  const SizedBox(
+                    width: 56,
+                    height: 56,
+                    child: CircularProgressIndicator(strokeWidth: 4),
+                  ),
+                  const SizedBox(height: 28),
+                  Text(
+                    'Menyiapkan pose detection',
+                    style: Theme.of(context).textTheme.titleMedium?.copyWith(
+                        fontWeight: FontWeight.w600),
+                    textAlign: TextAlign.center,
+                  ),
+                  const SizedBox(height: 10),
+                  Text(
+                    _initStatusMessage,
+                    style: Theme.of(context).textTheme.bodyMedium?.copyWith(
+                        color: scheme.onSurfaceVariant),
+                    textAlign: TextAlign.center,
+                  ),
+                  const SizedBox(height: 6),
+                  Text(
+                    'Mohon tunggu, proses ini berjalan di thread terpisah.',
+                    style: Theme.of(context).textTheme.bodySmall?.copyWith(
+                        color: scheme.onSurfaceVariant),
+                    textAlign: TextAlign.center,
+                  ),
+                ],
+              ],
+            ),
+          ),
+        ),
+      ),
+    );
+  }
+
   @override
   Widget build(BuildContext context) {
+    // Tahan mode perekaman sampai semua isolate (pose detection thread 2 +
+    // classifier + frame saver) selesai diinisialisasi. Tampilkan loading
+    // full-screen agar user tahu apa yang sedang berlangsung.
+    if (!_processorReady) {
+      return _buildInitializationScreen(context);
+    }
+
     final state = context.watch<TSmartState>();
     final athlete = state.selectedAthlete;
 
@@ -1019,27 +1143,6 @@ class _RecordingScreenState extends State<RecordingScreen> {
                 icon: const Icon(Icons.flip_camera_ios, color: Colors.white),
                 style: IconButton.styleFrom(
                     backgroundColor: Colors.black45),
-              ),
-            ),
-          // Overlay inisialisasi detektor
-          if (!_processorReady)
-            Positioned(
-              bottom: 60,
-              left: 0,
-              right: 0,
-              child: Center(
-                child: Container(
-                  padding: const EdgeInsets.symmetric(
-                      horizontal: 12, vertical: 6),
-                  decoration: BoxDecoration(
-                    color: Colors.black54,
-                    borderRadius: BorderRadius.circular(8),
-                  ),
-                  child: const Text(
-                    'Menginisialisasi detektor pose...',
-                    style: TextStyle(color: Colors.white, fontSize: 12),
-                  ),
-                ),
               ),
             ),
           // Skeleton overlay pose detection
