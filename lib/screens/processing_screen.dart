@@ -4,6 +4,7 @@ import 'package:provider/provider.dart';
 
 import '../providers/t_smart_state.dart';
 import '../services/analysis/gemini_service.dart';
+import '../services/analysis/rate_limiter.dart';
 import '../services/analysis/recommendation_service.dart';
 
 // ---------------------------------------------------------------------------
@@ -212,8 +213,11 @@ class _ProcessingScreenState extends State<ProcessingScreen>
     // ── Step 2: Evaluasi Gemini AI ─────────────────────────────────────────
     _setStepRunning(2);
     _addLog('Mengirim data ke Gemini AI…');
-    if (pending.bestFrames.isNotEmpty) {
-      _addLog('Melampirkan ${pending.bestFrames.length} frame terbaik.');
+
+    // Pilih hingga 10 gambar: best frames + sample frames
+    final selectedImages = pending.selectImagesForAnalysis(maxImages: 10);
+    if (selectedImages.isNotEmpty) {
+      _addLog('Melampirkan ${selectedImages.length} frame (maks 10).');
     } else {
       _addLog(
         'Tidak ada frame gambar tersedia, analisis berbasis teks saja.',
@@ -227,7 +231,7 @@ class _ProcessingScreenState extends State<ProcessingScreen>
         berlariScore != null ? berlariScore.toStringAsFixed(1) : 'N/A';
 
     final prompt = '''
-Kamu adalah pelatih lari sprint profesional. 
+Kamu adalah pelatih lari sprint profesional.
 Berikut adalah hasil analisis teknik lari atlet:
 
 - Skor posisi bersedia/start: $bersediaDisplay / 100
@@ -236,7 +240,7 @@ Berikut adalah hasil analisis teknik lari atlet:
   (jumlah frame terdeteksi: ${pending.berlariScores.length})
 - Durasi rekaman: ${pending.timerSeconds} detik
 
-${pending.bestFrames.isNotEmpty ? 'Gambar frame terbaik dari posisi bersedia dan berlari dilampirkan.' : 'Tidak ada frame gambar yang tersedia.'}
+${selectedImages.isNotEmpty ? 'Gambar frame terbaik dari posisi bersedia dan berlari dilampirkan (${selectedImages.length} gambar).' : 'Tidak ada frame gambar yang tersedia.'}
 
 Berikan evaluasi singkat (3–4 kalimat) tentang teknik keseluruhan atlet, lalu sebutkan 1–2 poin yang perlu diperbaiki. Gunakan bahasa Indonesia yang mudah dipahami.
 ''';
@@ -245,7 +249,7 @@ Berikan evaluasi singkat (3–4 kalimat) tentang teknik keseluruhan atlet, lalu 
     try {
       if (mounted) setState(() => _waitingForAi = true);
       aiAnalysis = await _geminiService.getAnalysisWithImages(
-        imageFiles: pending.bestFrames,
+        imageFiles: selectedImages,
         textPrompt: prompt,
       );
       if (mounted) setState(() => _waitingForAi = false);
@@ -253,9 +257,15 @@ Berikan evaluasi singkat (3–4 kalimat) tentang teknik keseluruhan atlet, lalu 
       _setStepDone(2, detail: 'Analisis diterima');
     } catch (e) {
       if (mounted) setState(() => _waitingForAi = false);
-      aiAnalysis =
-          'Analisis AI tidak tersedia saat ini. Silakan periksa koneksi internet dan GEMINI_API_KEY.';
-      _addLog('Gemini gagal: $e', level: _LogLevel.error);
+      if (e is RateLimitExceededException) {
+        aiAnalysis =
+            'Analisis AI tertunda (rate limit). ${e.message}';
+        _addLog('Rate limit: ${e.message}', level: _LogLevel.warning);
+      } else {
+        aiAnalysis =
+            'Analisis AI tidak tersedia saat ini. Silakan periksa koneksi internet dan GEMINI_API_KEY.';
+        _addLog('Gemini gagal: $e', level: _LogLevel.error);
+      }
       _addLog(
         'Melanjutkan tanpa evaluasi AI.',
         level: _LogLevel.warning,

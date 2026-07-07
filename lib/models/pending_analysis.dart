@@ -9,6 +9,7 @@ class PendingAnalysis {
     required this.berlariScores,
     this.bestBersediaFrame,
     this.bestBerlariFrame,
+    this.sampleFramePaths = const [],
   });
 
   /// Path file video yang direkam/dipilih.
@@ -29,6 +30,9 @@ class PendingAnalysis {
   /// Frame terbaik untuk posisi berlari (digunakan Gemini).
   final File? bestBerlariFrame;
 
+  /// Semua frame sample yang disimpan selama rekaman (pose terdeteksi).
+  final List<String> sampleFramePaths;
+
   /// Skor rata-rata posisi bersedia (null jika tidak ada frame bersedia).
   double? get avgBersediaScore {
     if (bersediaScores.isEmpty) return null;
@@ -47,5 +51,28 @@ class PendingAnalysis {
     if (bestBersediaFrame != null) frames.add(bestBersediaFrame!);
     if (bestBerlariFrame != null) frames.add(bestBerlariFrame!);
     return frames;
+  }
+
+  /// Pilih hingga [maxImages] frame untuk dikirim ke Gemini.
+  ///
+  /// Prioritas: frame terbaik dulu, lalu sample frame yang pose-nya terdeteksi.
+  /// Maksimal [maxImages] gambar (default 10).
+  List<File> selectImagesForAnalysis({int maxImages = 10}) {
+    final selected = <File>[];
+
+    // Prioritaskan best frames
+    if (bestBersediaFrame != null) selected.add(bestBersediaFrame!);
+    if (bestBerlariFrame != null) selected.add(bestBerlariFrame!);
+
+    // Tambahkan sample frames hingga mencapai maxImages
+    for (final path in sampleFramePaths) {
+      if (selected.length >= maxImages) break;
+      final file = File(path);
+      if (file.existsSync() && !selected.any((f) => f.path == path)) {
+        selected.add(file);
+      }
+    }
+
+    return selected;
   }
 }

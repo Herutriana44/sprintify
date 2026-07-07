@@ -2,9 +2,12 @@ import 'dart:io';
 import 'package:flutter_dotenv/flutter_dotenv.dart';
 import 'package:google_generative_ai/google_generative_ai.dart';
 
+import 'rate_limiter.dart';
+
 class GeminiService {
   GenerativeModel? _model;
   String? _initError;
+  final RateLimiter _rateLimiter = RateLimiter();
 
   GeminiService() {
     try {
@@ -27,6 +30,7 @@ class GeminiService {
     if (_model == null) {
       return 'Analisis AI tidak tersedia: $_initError';
     }
+    await _rateLimiter.acquire();
     final response = await _model!.generateContent([Content.text(prompt)]);
     return response.text ?? 'Tidak ada analisis yang dihasilkan.';
   }
@@ -47,6 +51,8 @@ class GeminiService {
       // Fallback ke text-only jika tidak ada gambar
       return getAnalysis(textPrompt);
     }
+
+    await _rateLimiter.acquire();
 
     final List<Part> parts = [];
 

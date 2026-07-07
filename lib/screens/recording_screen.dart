@@ -46,6 +46,12 @@ class _RecordingScreenState extends State<RecordingScreen> {
   String? _bestBerlariFramePath;
   double _bestBerlariScore = -1;
 
+  // Sample frames — disimpan periodik saat pose terdeteksi
+  final List<String> _sampleFramePaths = [];
+  int _sampleFrameCounter = 0;
+  static const int _maxSampleFrames = 20; // simpan lebih banyak, nanti difilter ke 10
+  static const int _sampleFrameInterval = 5; // simpan tiap 5 frame pose
+
   String? _videoPath;
   bool _recording = false;
   int _seconds = 0;
@@ -390,6 +396,8 @@ class _RecordingScreenState extends State<RecordingScreen> {
     _bestBerlariScore = -1;
     _bestBersediaFramePath = null;
     _bestBerlariFramePath = null;
+    _sampleFramePaths.clear();
+    _sampleFrameCounter = 0;
   }
 
   // ---------------------------------------------------------------------------
@@ -462,6 +470,13 @@ class _RecordingScreenState extends State<RecordingScreen> {
               _bestBerlariScore = result.classification!.score;
               unawaited(_saveBestFrame(image, 'berlari', result.classification!.score));
             }
+          }
+
+          // Simpan sample frame periodik (tiap N frame pose terdeteksi)
+          _sampleFrameCounter++;
+          if (_sampleFrameCounter % _sampleFrameInterval == 0 &&
+              _sampleFramePaths.length < _maxSampleFrames) {
+            unawaited(_saveSampleFrame(image, result.classification!.label.name));
           }
         }
       }
@@ -549,6 +564,26 @@ class _RecordingScreenState extends State<RecordingScreen> {
       }
     } catch (e) {
       debugPrint('Gagal menyimpan best frame: $e');
+    }
+  }
+
+  /// Simpan sample frame periodik (non-blocking).
+  Future<void> _saveSampleFrame(CameraImage image, String label) async {
+    if (_frameSavingIsolate == null) return;
+
+    try {
+      final result = await _frameSavingIsolate!.saveFrame(
+        frameBytes: image.planes.first.bytes,
+        label: 'sample_$label',
+        timestamp: DateTime.now().millisecondsSinceEpoch,
+        outputDir: '/storage/emulated/0/Movies/T-Smart/frames',
+      );
+
+      if (result.success && result.path != null) {
+        _sampleFramePaths.add(result.path);
+      }
+    } catch (e) {
+      debugPrint('Gagal menyimpan sample frame: $e');
     }
   }
 
@@ -683,6 +718,7 @@ class _RecordingScreenState extends State<RecordingScreen> {
       bestBerlariFrame: _bestBerlariFramePath != null
           ? File(_bestBerlariFramePath!)
           : null,
+      sampleFramePaths: List.unmodifiable(_sampleFramePaths),
     );
 
     if (!mounted) return;
