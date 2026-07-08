@@ -580,7 +580,7 @@ class _RecordingScreenState extends State<RecordingScreen> {
       );
 
       if (result.success && result.path != null) {
-        _sampleFramePaths.add(result.path);
+        _sampleFramePaths.add(result.path!);
       }
     } catch (e) {
       debugPrint('Gagal menyimpan sample frame: $e');
