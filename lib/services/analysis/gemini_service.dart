@@ -11,6 +11,11 @@ class GeminiService {
 
   GeminiService() {
     try {
+      // Pastikan dotenv sudah diinisialisasi
+      if (!dotenv.isInitialized) {
+        _initError = 'Environment variables (.env) belum diinisialisasi';
+        return;
+      }
       final apiKey = dotenv.get('GEMINI_API_KEY', fallback: '');
       if (apiKey.isEmpty) {
         _initError = 'GEMINI_API_KEY tidak ditemukan di file .env';
