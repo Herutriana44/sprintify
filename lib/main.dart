@@ -15,8 +15,10 @@ Future<void> main() async {
 
   try {
     await dotenv.load(fileName: ".env");
+    debugPrint('✓ Environment variables loaded successfully');
   } catch (e) {
-    debugPrint('DOTENV ERROR: $e');
+    debugPrint('⚠ Warning: Failed to load .env file: $e');
+    debugPrint('⚠ Proceeding with default/empty environment variables');
   }
 
   runApp(

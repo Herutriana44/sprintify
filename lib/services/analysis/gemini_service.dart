@@ -11,13 +11,14 @@ class GeminiService {
 
   GeminiService() {
     try {
-      final apiKey = dotenv.env['GEMINI_API_KEY'];
-      if (apiKey == null || apiKey.isEmpty) {
+      final apiKey = dotenv.get('GEMINI_API_KEY', fallback: '');
+      if (apiKey.isEmpty) {
         _initError = 'GEMINI_API_KEY tidak ditemukan di file .env';
         return;
       }
+      final modelId = dotenv.get('GEMINI_MODEL_ID', fallback: 'gemini-1.5-flash');
       _model = GenerativeModel(
-        model: dotenv.env['GEMINI_MODEL_ID'] ?? 'gemini-1.5-flash',
+        model: modelId,
         apiKey: apiKey,
       );
     } catch (e) {
