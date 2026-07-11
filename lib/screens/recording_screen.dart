@@ -226,6 +226,13 @@ class _RecordingScreenState extends State<RecordingScreen> {
       if (file != null) {
         setState(() => _videoPath = file.path);
         _addLog('Video dipilih: ${file.name}');
+
+        // Auto-trigger assessment setelah video dipilih dari galeri.
+        WidgetsBinding.instance.addPostFrameCallback((_) {
+          if (mounted && _videoPath != null) {
+            _finish();
+          }
+        });
       }
     } else if ((statuses[Permission.videos] ?? PermissionStatus.denied)
             .isPermanentlyDenied ||
@@ -653,6 +660,13 @@ class _RecordingScreenState extends State<RecordingScreen> {
           if (!mounted) return;
           setState(() => _videoPath = savedFile.path);
           _addLog('Video disimpan di: $_videoPath', type: LogType.app);
+
+          // Auto-trigger assessment setelah rekaman selesai.
+          WidgetsBinding.instance.addPostFrameCallback((_) {
+            if (mounted && !_recording && _videoPath != null) {
+              _finish();
+            }
+          });
         }
       }
     } catch (e) {
@@ -981,13 +995,6 @@ class _RecordingScreenState extends State<RecordingScreen> {
                           icon: const Icon(Icons.photo_library),
                           tooltip: 'Pilih dari galeri',
                         ),
-                      const SizedBox(width: 8),
-                      Expanded(
-                        child: FilledButton(
-                          onPressed: _finish,
-                          child: const Text('Selesai & analisis'),
-                        ),
-                      ),
                     ],
                   ),
                 ],
