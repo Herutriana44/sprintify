@@ -44,6 +44,7 @@ dependencies:
   flutter_dotenv: ^5.1.0
   path_provider: ^2.1.2
   image_picker: ^1.1.2
+  tflite_flutter: ^0.10.4
 
 dev_dependencies:
   flutter_test:
@@ -80,6 +81,8 @@ flutter:
 
   assets:
     - assets/data/reference_poses.json
+    - assets/models/pose_classifier.tflite
+    - assets/models/pose_labels.json
     - .env
 
   # To add custom fonts to your application, add a fonts section here,
