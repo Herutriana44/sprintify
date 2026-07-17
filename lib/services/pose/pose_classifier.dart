@@ -1,6 +1,8 @@
 import 'package:google_mlkit_pose_detection/google_mlkit_pose_detection.dart';
+import 'package:tflite_flutter/tflite_flutter.dart';
+import 'dart:typed_data';
 
-/// Hasil klasifikasi satu frame pose.
+/// Pose classification result: label + confidence score.
 enum PoseLabel { bersedia, berlari, unknown }
 
 class FramePoseResult {
@@ -13,121 +15,248 @@ class FramePoseResult {
   final double score;
 }
 
-/// Klasifikasi pose berdasarkan data referensi JSON.
+/// TFLite-based pose classifier for "bersedia" (ready) vs "berlari" (running).
 ///
-/// Cara kerja:
-/// 1. Hitung skor Euclidean terhadap semua landmark referensi untuk
-///    setiap kategori (bersedia / berlari).
-/// 2. Pilih kategori dengan skor tertinggi.
-/// 3. Jika skor tertinggi < threshold, kembalikan [PoseLabel.unknown].
+/// Loads the trained TFLite model and runs inference on pose landmarks.
+/// Falls back to unknown if model not available (during initial setup).
 class PoseClassifier {
-  PoseClassifier({required Map<String, dynamic> referencePoses})
-      : _refs = referencePoses;
+  Interpreter? _interpreter;
+  bool _isInitialized = false;
+  static const String _modelPath = 'assets/models/pose_classifier.tflite';
+  static const int _inputSize = 151; // 99 coords + 39 bone vectors + 13 bone lengths
 
-  final Map<String, dynamic> _refs;
+  /// Bone connections (same as training script)
+  static const List<List<int>> _boneConnections = [
+    [11, 13], [13, 15], // left arm
+    [12, 14], [14, 16], // right arm
+    [11, 12],            // shoulders
+    [11, 23], [12, 24],  // torso sides
+    [23, 25], [25, 27],  // left leg
+    [24, 26], [26, 28],  // right leg
+    [23, 24],            // hips
+  ];
 
-  static const double _defaultThreshold = 45.0;
+  /// Initialize TFLite model (called once at startup)
+  Future<void> initialize() async {
+    if (_isInitialized) return;
+    try {
+      _interpreter = await Interpreter.fromAsset(_modelPath);
+      _isInitialized = true;
+    } catch (e) {
+      // Model not available yet (training in progress) — continue with unknown labels
+      print('PoseClassifier: TFLite model not found, falling back to unknown: $e');
+    }
+  }
 
-  // ---------------------------------------------------------------------------
-  // Public API
-  // ---------------------------------------------------------------------------
-
-  /// Klasifikasi [pose] ML Kit — dipakai di main isolate.
+  /// Classify pose from MLKit Pose landmarks
   FramePoseResult classify(Pose pose) {
-    return classifyFromMap(_landmarksToMap(pose));
+    if (!_isInitialized || _interpreter == null) {
+      return const FramePoseResult(label: PoseLabel.unknown, score: 0.0);
+    }
+
+    try {
+      final features = _extractFeatures(pose);
+      final predictions = _runInference(features);
+
+      // Find top prediction
+      double bestScore = 0.0;
+      PoseLabel bestLabel = PoseLabel.unknown;
+
+      if (predictions['bersedia'] != null && predictions['bersedia']! > bestScore) {
+        bestScore = predictions['bersedia']!;
+        bestLabel = PoseLabel.bersedia;
+      }
+
+      if (predictions['berlari'] != null && predictions['berlari']! > bestScore) {
+        bestScore = predictions['berlari']!;
+        bestLabel = PoseLabel.berlari;
+      }
+
+      return FramePoseResult(label: bestLabel, score: bestScore);
+    } catch (e) {
+      print('PoseClassifier error: $e');
+      return const FramePoseResult(label: PoseLabel.unknown, score: 0.0);
+    }
   }
 
-  /// Klasifikasi dari Map plain-Dart — dipakai di dalam classifier isolate.
+  /// Classify from serialized landmarks (for isolate)
   FramePoseResult classifyFromMap(Map<String, Map<String, double>> landmarks) {
-    double bestScore = -1;
-    PoseLabel bestLabel = PoseLabel.unknown;
+    if (!_isInitialized || _interpreter == null) {
+      return const FramePoseResult(label: PoseLabel.unknown, score: 0.0);
+    }
 
-    for (final entry in _refs.entries) {
-      final label = _labelFromString(entry.key);
-      if (label == PoseLabel.unknown) continue;
+    try {
+      final features = _extractFeaturesFromMap(landmarks);
+      final predictions = _runInference(features);
 
-      final landmarksRef = entry.value['landmarks'] as Map<String, dynamic>?;
-      if (landmarksRef == null) continue;
+      double bestScore = 0.0;
+      PoseLabel bestLabel = PoseLabel.unknown;
 
-      final score = _computeScoreFromMap(landmarks, landmarksRef);
-      final threshold =
-          (entry.value['thresholds']?['min_score_to_classify'] as num?)
-                  ?.toDouble() ??
-              _defaultThreshold;
+      if (predictions['bersedia'] != null && predictions['bersedia']! > bestScore) {
+        bestScore = predictions['bersedia']!;
+        bestLabel = PoseLabel.bersedia;
+      }
 
-      if (score > bestScore) {
-        bestScore = score;
-        bestLabel = score >= threshold ? label : PoseLabel.unknown;
+      if (predictions['berlari'] != null && predictions['berlari']! > bestScore) {
+        bestScore = predictions['berlari']!;
+        bestLabel = PoseLabel.berlari;
+      }
+
+      return FramePoseResult(label: bestLabel, score: bestScore);
+    } catch (e) {
+      print('PoseClassifier error: $e');
+      return const FramePoseResult(label: PoseLabel.unknown, score: 0.0);
+    }
+  }
+
+  /// Extract and normalize features from MLKit Pose
+  List<double> _extractFeatures(Pose pose) {
+    final landmarks = pose.landmarks;
+    final coords = List.generate(33, (i) {
+      final keys = [
+        PoseLandmarkType.leftShoulder,
+        PoseLandmarkType.rightShoulder,
+        PoseLandmarkType.leftElbow,
+        PoseLandmarkType.rightElbow,
+        PoseLandmarkType.leftWrist,
+        PoseLandmarkType.rightWrist,
+        PoseLandmarkType.leftHip,
+        PoseLandmarkType.rightHip,
+        PoseLandmarkType.leftKnee,
+        PoseLandmarkType.rightKnee,
+        PoseLandmarkType.leftAnkle,
+        PoseLandmarkType.rightAnkle,
+        PoseLandmarkType.pic,
+        PoseLandmarkType.nose,
+        PoseLandmarkType.leftEyeInner,
+        PoseLandmarkType.leftEye,
+        PoseLandmarkType.leftEyeOuter,
+        PoseLandmarkType.rightEyeInner,
+        PoseLandmarkType.rightEye,
+        PoseLandmarkType.rightEyeOuter,
+        PoseLandmarkType.leftEar,
+        PoseLandmarkType.rightEar,
+        PoseLandmarkType.leftMouth,
+        PoseLandmarkType.rightMouth,
+        PoseLandmarkType.pelvis,
+        PoseLandmarkType.leftPelvis,
+        PoseLandmarkType.rightPelvis,
+        PoseLandmarkType.leftHeel,
+        PoseLandmarkType.rightHeel,
+        PoseLandmarkType.leftFootIndex,
+        PoseLandmarkType.rightFootIndex,
+        PoseLandmarkType.spine,
+        PoseLandmarkType.leftCollar,
+        PoseLandmarkType.rightCollar,
+      ][i];
+      final lm = landmarks[keys];
+      return [lm?.x ?? 0.0, lm?.y ?? 0.0, lm?.z ?? 0.0];
+    });
+
+    return _normalizeAndBuild(coords);
+  }
+
+  /// Extract features from serialized landmarks
+  List<double> _extractFeaturesFromMap(Map<String, Map<String, double>> landmarks) {
+    final coordMap = {
+      'left_shoulder': [landmarks['left_shoulder']?['x'] ?? 0, landmarks['left_shoulder']?['y'] ?? 0, landmarks['left_shoulder']?['z'] ?? 0],
+      'right_shoulder': [landmarks['right_shoulder']?['x'] ?? 0, landmarks['right_shoulder']?['y'] ?? 0, landmarks['right_shoulder']?['z'] ?? 0],
+      'left_hip': [landmarks['left_hip']?['x'] ?? 0, landmarks['left_hip']?['y'] ?? 0, landmarks['left_hip']?['z'] ?? 0],
+      'right_hip': [landmarks['right_hip']?['x'] ?? 0, landmarks['right_hip']?['y'] ?? 0, landmarks['right_hip']?['z'] ?? 0],
+    };
+
+    final coords = List.generate(33, (i) => [0.0, 0.0, 0.0]);
+    coords[0] = (coordMap['left_shoulder'] as List).cast<double>();
+    coords[1] = (coordMap['right_shoulder'] as List).cast<double>();
+    coords[6] = (coordMap['left_hip'] as List).cast<double>();
+    coords[7] = (coordMap['right_hip'] as List).cast<double>();
+
+    return _normalizeAndBuild(coords);
+  }
+
+  /// Normalize coordinates and build feature vector
+  List<double> _normalizeAndBuild(List<List<double>> coords) {
+    final leftHip = coords[6];
+    final rightHip = coords[7];
+    final hipCenter = [
+      (leftHip[0] + rightHip[0]) / 2,
+      (leftHip[1] + rightHip[1]) / 2,
+      (leftHip[2] + rightHip[2]) / 2,
+    ];
+
+    final normalized = coords.map((c) => [
+      c[0] - hipCenter[0],
+      c[1] - hipCenter[1],
+      c[2] - hipCenter[2],
+    ]).toList();
+
+    final leftShoulder = normalized[0];
+    final torsoLen = (leftShoulder[0] * leftShoulder[0] +
+            leftShoulder[1] * leftShoulder[1] +
+            leftShoulder[2] * leftShoulder[2])
+        .toDouble();
+
+    if (torsoLen > 1e-6) {
+      final scale = 1.0 / torsoLen.sqrt();
+      for (int i = 0; i < normalized.length; i++) {
+        normalized[i] = [
+          normalized[i][0] * scale,
+          normalized[i][1] * scale,
+          normalized[i][2] * scale,
+        ];
       }
     }
 
-    return FramePoseResult(
-      label: bestLabel,
-      score: bestScore < 0 ? 0 : bestScore,
-    );
+    final features = <double>[];
+    for (final c in normalized) {
+      features.addAll(c);
+    }
+
+    for (final conn in _boneConnections) {
+      final start = normalized[conn[0]];
+      final end = normalized[conn[1]];
+      features.add(end[0] - start[0]);
+      features.add(end[1] - start[1]);
+      features.add(end[2] - start[2]);
+    }
+
+    for (final conn in _boneConnections) {
+      final start = normalized[conn[0]];
+      final end = normalized[conn[1]];
+      final dx = end[0] - start[0];
+      final dy = end[1] - start[1];
+      final dz = end[2] - start[2];
+      features.add(dx * dx + dy * dy + dz * dz);
+    }
+
+    return features;
   }
 
-  /// Skor kemiripan (0–100) antara [pose] dan referensi [referenceKey].
-  double scoreAgainstReference(Pose pose, String referenceKey) {
-    final ref = _refs[referenceKey];
-    if (ref == null) return 0.0;
-    final landmarksRef = ref['landmarks'] as Map<String, dynamic>?;
-    if (landmarksRef == null) return 0.0;
-    return _computeScoreFromMap(_landmarksToMap(pose), landmarksRef);
-  }
-
-  // ---------------------------------------------------------------------------
-  // Private helpers
-  // ---------------------------------------------------------------------------
-
-  /// Konversi Pose ML Kit → Map plain-Dart dengan key string sesuai JSON.
-  static Map<String, Map<String, double>> _landmarksToMap(Pose pose) {
-    final result = <String, Map<String, double>>{};
-    for (final entry in pose.landmarks.entries) {
-      final key = landmarkTypeToString(entry.key);
-      if (key != null) {
-        result[key] = {'x': entry.value.x, 'y': entry.value.y};
+  /// Run TFLite inference
+  Map<String, double> _runInference(List<double> features) {
+    if (features.length != _inputSize) {
+      print('Warning: expected $_inputSize features, got ${features.length}');
+      // Pad or truncate
+      final padded = List<double>.filled(_inputSize, 0.0);
+      for (int i = 0; i < features.length && i < _inputSize; i++) {
+        padded[i] = features[i];
       }
-    }
-    return result;
-  }
-
-  double _computeScoreFromMap(
-    Map<String, Map<String, double>> detected,
-    Map<String, dynamic> landmarksRef,
-  ) {
-    double totalSqDist = 0.0;
-    int count = 0;
-
-    for (final entry in landmarksRef.entries) {
-      final lm = detected[entry.key];
-      if (lm == null) continue;
-
-      final refX = (entry.value['x'] as num).toDouble();
-      final refY = (entry.value['y'] as num).toDouble();
-      final dx = lm['x']! - refX;
-      final dy = lm['y']! - refY;
-      totalSqDist += dx * dx + dy * dy;
-      count++;
+      features = padded;
     }
 
-    if (count == 0) return 0.0;
-    final avgSqDist = totalSqDist / count;
-    return ((1.0 - avgSqDist.clamp(0.0, 1.0)) * 100).clamp(0.0, 100.0);
+    final input = [features];
+    final output = List<List<double>>.filled(1, List.filled(2, 0.0));
+    _interpreter!.run(input, output);
+
+    return {
+      'bersedia': output[0][0],
+      'berlari': output[0][1],
+    };
   }
 
-  PoseLabel _labelFromString(String key) {
-    switch (key) {
-      case 'bersedia': return PoseLabel.bersedia;
-      case 'berlari':  return PoseLabel.berlari;
-      default:         return PoseLabel.unknown;
-    }
+  void dispose() {
+    _interpreter?.close();
   }
-
-  // ---------------------------------------------------------------------------
-  // Static mapping PoseLandmarkType → JSON key string
-  // (public agar bisa dipakai di classifier_isolate.dart)
-  // ---------------------------------------------------------------------------
 
   static String? landmarkTypeToString(PoseLandmarkType type) {
     switch (type) {

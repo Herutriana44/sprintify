@@ -26,9 +26,10 @@ class FrameProcessingResult {
 }
 
 class BatchFrameProcessor {
-  BatchFrameProcessor({required this.referencePoses});
+  BatchFrameProcessor({Map<String, dynamic>? referencePoses})
+      : _referencePoses = referencePoses;
 
-  final Map<String, dynamic> referencePoses;
+  final Map<String, dynamic>? _referencePoses; // Kept for backwards compatibility but unused
 
   PoseDetectionPool? _posePool;
   ClassifierIsolate? _classifierIsolate;
@@ -41,7 +42,7 @@ class BatchFrameProcessor {
     await _posePool!.initialize();
 
     _classifierIsolate = ClassifierIsolate();
-    await _classifierIsolate!.start(referencePoses);
+    await _classifierIsolate!.start();
 
     _initialized = true;
   }

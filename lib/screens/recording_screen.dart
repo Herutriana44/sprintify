@@ -32,8 +32,7 @@ class RecordingScreen extends StatefulWidget {
 }
 
 class _RecordingScreenState extends State<RecordingScreen> {
-  final AnalysisService _analysisService = AnalysisService();
-  BatchFrameProcessor? _batchProcessor;
+  final BatchFrameProcessor? _batchProcessor = null;
   FrameSavingIsolate? _frameSavingIsolate;
 
   // Per-frame score accumulators
@@ -104,35 +103,16 @@ class _RecordingScreenState extends State<RecordingScreen> {
 
   Future<void> _initializeProcessors() async {
     try {
-      // Stage 1: load reference poses via analysis service
-      if (mounted) {
-        setState(() => _initStatusMessage = 'Memuat data referensi pose...');
-      }
-      await _analysisService.loadReferencePoses();
-
-      if (!_analysisService.isLoaded) {
-        throw Exception('Gagal memuat data referensi pose');
-      }
-
-      // Stage 2: parse reference poses JSON
-      if (mounted) {
-        setState(() =>
-            _initStatusMessage = 'Memuat konfigurasi referensi pose...');
-      }
-      final referencePoses = await _loadReferencePosesData();
-
-      // Stage 3: spin up batch processor (pose detection isolates + classifier)
+      // Stage 1: spin up batch processor (pose detection isolates + TFLite classifier)
       if (mounted) {
         setState(() => _initStatusMessage =
-            'Menginisialisasi threading isolate pose detection...');
+            'Menginisialisasi pose detection & classifier...');
       }
-      _batchProcessor = BatchFrameProcessor(
-        referencePoses: referencePoses,
-      );
+      _batchProcessor = BatchFrameProcessor();
       await _batchProcessor!.initialize();
       _addLog('Batch processor initialized', type: LogType.app);
 
-      // Stage 4: frame saving isolate untuk non-blocking I/O
+      // Stage 2: frame saving isolate untuk non-blocking I/O
       if (mounted) {
         setState(() =>
             _initStatusMessage = 'Menyiapkan penyimpan frame...');
@@ -158,16 +138,10 @@ class _RecordingScreenState extends State<RecordingScreen> {
     }
   }
 
-  Future<Map<String, dynamic>> _loadReferencePosesData() async {
-    final String response = await rootBundle.loadString('assets/data/reference_poses.json');
-    return json.decode(response)['reference_poses'] as Map<String, dynamic>;
-  }
-
   @override
   void dispose() {
     _timer?.cancel();
     _cameraManager.dispose();
-    _analysisService.dispose();
     _batchProcessor?.dispose();
     _frameSavingIsolate?.dispose();
     super.dispose();
