@@ -32,7 +32,7 @@ class RecordingScreen extends StatefulWidget {
 }
 
 class _RecordingScreenState extends State<RecordingScreen> {
-  final BatchFrameProcessor? _batchProcessor = null;
+  BatchFrameProcessor? _batchProcessor;
   FrameSavingIsolate? _frameSavingIsolate;
 
   // Per-frame score accumulators

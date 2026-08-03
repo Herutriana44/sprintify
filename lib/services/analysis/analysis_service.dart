@@ -21,7 +21,7 @@ class AnalysisService {
     _referencePoses =
         json.decode(response)['reference_poses'] as Map<String, dynamic>;
 
-    await _classifierIsolate.start(_referencePoses!);
+    await _classifierIsolate.start();
   }
 
   bool get isLoaded =>
@@ -43,24 +43,6 @@ class AnalysisService {
 
     final result = await _classifierIsolate.classify(serialized);
     return FramePoseResult(label: result.label, score: result.score);
-  }
-
-  /// Versi synchronous — fallback bila isolate belum siap.
-  FramePoseResult classifyPose(Pose pose) {
-    if (_referencePoses == null) {
-      return const FramePoseResult(label: PoseLabel.unknown, score: 0);
-    }
-    return PoseClassifier(referencePoses: _referencePoses!).classify(pose);
-  }
-
-  // ---------------------------------------------------------------------------
-  // Skor terhadap referensi tertentu
-  // ---------------------------------------------------------------------------
-
-  double calculatePoseScore(Pose detectedPose, String referenceType) {
-    if (_referencePoses == null) return 0.0;
-    return PoseClassifier(referencePoses: _referencePoses!)
-        .scoreAgainstReference(detectedPose, referenceType);
   }
 
   // ---------------------------------------------------------------------------

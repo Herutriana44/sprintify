@@ -1,6 +1,8 @@
+import 'dart:math';
+import 'dart:typed_data';
+
 import 'package:google_mlkit_pose_detection/google_mlkit_pose_detection.dart';
 import 'package:tflite_flutter/tflite_flutter.dart';
-import 'dart:typed_data';
 
 /// Pose classification result: label + confidence score.
 enum PoseLabel { bersedia, berlari, unknown }
@@ -114,19 +116,6 @@ class PoseClassifier {
     final landmarks = pose.landmarks;
     final coords = List.generate(33, (i) {
       final keys = [
-        PoseLandmarkType.leftShoulder,
-        PoseLandmarkType.rightShoulder,
-        PoseLandmarkType.leftElbow,
-        PoseLandmarkType.rightElbow,
-        PoseLandmarkType.leftWrist,
-        PoseLandmarkType.rightWrist,
-        PoseLandmarkType.leftHip,
-        PoseLandmarkType.rightHip,
-        PoseLandmarkType.leftKnee,
-        PoseLandmarkType.rightKnee,
-        PoseLandmarkType.leftAnkle,
-        PoseLandmarkType.rightAnkle,
-        PoseLandmarkType.pic,
         PoseLandmarkType.nose,
         PoseLandmarkType.leftEyeInner,
         PoseLandmarkType.leftEye,
@@ -138,16 +127,28 @@ class PoseClassifier {
         PoseLandmarkType.rightEar,
         PoseLandmarkType.leftMouth,
         PoseLandmarkType.rightMouth,
-        PoseLandmarkType.pelvis,
-        PoseLandmarkType.leftPelvis,
-        PoseLandmarkType.rightPelvis,
+        PoseLandmarkType.leftShoulder,
+        PoseLandmarkType.rightShoulder,
+        PoseLandmarkType.leftElbow,
+        PoseLandmarkType.rightElbow,
+        PoseLandmarkType.leftWrist,
+        PoseLandmarkType.rightWrist,
+        PoseLandmarkType.leftPinky,
+        PoseLandmarkType.rightPinky,
+        PoseLandmarkType.leftIndex,
+        PoseLandmarkType.rightIndex,
+        PoseLandmarkType.leftThumb,
+        PoseLandmarkType.rightThumb,
+        PoseLandmarkType.leftHip,
+        PoseLandmarkType.rightHip,
+        PoseLandmarkType.leftKnee,
+        PoseLandmarkType.rightKnee,
+        PoseLandmarkType.leftAnkle,
+        PoseLandmarkType.rightAnkle,
         PoseLandmarkType.leftHeel,
         PoseLandmarkType.rightHeel,
         PoseLandmarkType.leftFootIndex,
         PoseLandmarkType.rightFootIndex,
-        PoseLandmarkType.spine,
-        PoseLandmarkType.leftCollar,
-        PoseLandmarkType.rightCollar,
       ][i];
       final lm = landmarks[keys];
       return [lm?.x ?? 0.0, lm?.y ?? 0.0, lm?.z ?? 0.0];
@@ -166,18 +167,18 @@ class PoseClassifier {
     };
 
     final coords = List.generate(33, (i) => [0.0, 0.0, 0.0]);
-    coords[0] = (coordMap['left_shoulder'] as List).cast<double>();
-    coords[1] = (coordMap['right_shoulder'] as List).cast<double>();
-    coords[6] = (coordMap['left_hip'] as List).cast<double>();
-    coords[7] = (coordMap['right_hip'] as List).cast<double>();
+    coords[11] = (coordMap['left_shoulder'] as List).cast<double>();
+    coords[12] = (coordMap['right_shoulder'] as List).cast<double>();
+    coords[23] = (coordMap['left_hip'] as List).cast<double>();
+    coords[24] = (coordMap['right_hip'] as List).cast<double>();
 
     return _normalizeAndBuild(coords);
   }
 
   /// Normalize coordinates and build feature vector
   List<double> _normalizeAndBuild(List<List<double>> coords) {
-    final leftHip = coords[6];
-    final rightHip = coords[7];
+    final leftHip = coords[23];
+    final rightHip = coords[24];
     final hipCenter = [
       (leftHip[0] + rightHip[0]) / 2,
       (leftHip[1] + rightHip[1]) / 2,
@@ -190,14 +191,14 @@ class PoseClassifier {
       c[2] - hipCenter[2],
     ]).toList();
 
-    final leftShoulder = normalized[0];
+    final leftShoulder = normalized[11];
     final torsoLen = (leftShoulder[0] * leftShoulder[0] +
             leftShoulder[1] * leftShoulder[1] +
             leftShoulder[2] * leftShoulder[2])
         .toDouble();
 
     if (torsoLen > 1e-6) {
-      final scale = 1.0 / torsoLen.sqrt();
+      final scale = 1.0 / sqrt(torsoLen);
       for (int i = 0; i < normalized.length; i++) {
         normalized[i] = [
           normalized[i][0] * scale,

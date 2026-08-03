@@ -44,7 +44,9 @@ dependencies:
   flutter_dotenv: ^5.1.0
   path_provider: ^2.1.2
   image_picker: ^1.1.2
-  tflite_flutter: ^0.10.4
+  tflite_flutter:
+    git:
+      url: https://github.com/tensorflow/flutter-tflite.git
 
 dev_dependencies:
   flutter_test:
