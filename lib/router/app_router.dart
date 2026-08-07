@@ -1,3 +1,5 @@
+import 'package:firebase_auth/firebase_auth.dart';
+import 'package:flutter/foundation.dart';
 import 'package:go_router/go_router.dart';
 
 import '../screens/analysis_detail_screen.dart';
@@ -16,8 +18,22 @@ import '../screens/splash_screen.dart';
 import '../screens/test_prep_screen.dart';
 
 GoRouter createAppRouter() {
+  final authNotifier = _AuthNotifier();
+
   return GoRouter(
     initialLocation: '/splash',
+    refreshListenable: authNotifier,
+    redirect: (context, state) {
+      final loggedIn = FirebaseAuth.instance.currentUser != null;
+      final loc = state.matchedLocation;
+      final onPublic =
+          loc == '/login' || loc == '/register' || loc == '/splash';
+
+      if (!loggedIn && !onPublic) return '/login';
+      if (loggedIn && loc == '/login') return '/dashboard';
+      if (loggedIn && loc == '/register') return '/dashboard';
+      return null;
+    },
     routes: [
       GoRoute(
         path: '/splash',
@@ -91,4 +107,22 @@ GoRouter createAppRouter() {
       ),
     ],
   );
+}
+
+/// Mendengarkan perubahan auth state Firebase dan memberi tahu GoRouter
+/// agar re-evaluasi redirect setiap kali status login berubah.
+class _AuthNotifier extends ChangeNotifier {
+  _AuthNotifier() {
+    _sub = FirebaseAuth.instance.authStateChanges().listen((_) {
+      notifyListeners();
+    });
+  }
+
+  late final dynamic _sub;
+
+  @override
+  void dispose() {
+    _sub.cancel();
+    super.dispose();
+  }
 }

@@ -44,6 +44,10 @@ dependencies:
   flutter_dotenv: ^5.1.0
   path_provider: ^2.1.2
   image_picker: ^1.1.2
+  firebase_core: ^3.6.0
+  firebase_auth: ^5.3.1
+  cloud_firestore: ^5.4.4
+  google_sign_in: ^6.2.1
   tflite_flutter:
     git:
       url: https://github.com/tensorflow/flutter-tflite.git
@@ -83,6 +87,7 @@ flutter:
 
   assets:
     - assets/data/reference_poses.json
+    - assets/models/pose_labels.json
     - .env
 
   # To add custom fonts to your application, add a fonts section here,

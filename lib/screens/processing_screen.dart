@@ -297,7 +297,7 @@ Berikan evaluasi singkat (3–4 kalimat) tentang teknik keseluruhan atlet, lalu 
 
     _addLog('Pipeline selesai. Menyimpan hasil…', level: _LogLevel.success);
 
-    state.completeRunWithFullResult(
+    await state.completeRunWithFullResult(
       aiAnalysis: aiAnalysis,
       bersediaScore: bersediaScore,
       berlariScore: berlariScore,
