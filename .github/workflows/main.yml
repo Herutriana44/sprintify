@@ -34,50 +34,94 @@ jobs:
             ${{ runner.os }}-pub-
 
       - name: Create .env file
+        env:
+          GEMINI_API_KEY: ${{ secrets.GEMINI_API_KEY }}
+          GEMINI_MODEL_ID: ${{ secrets.GEMINI_MODEL_ID }}
+          FIREBASE_API_KEY: ${{ secrets.FIREBASE_API_KEY }}
+          FIREBASE_APP_ID: ${{ secrets.FIREBASE_APP_ID }}
+          FIREBASE_MESSAGING_SENDER_ID: ${{ secrets.FIREBASE_MESSAGING_SENDER_ID }}
+          FIREBASE_PROJECT_ID: ${{ secrets.FIREBASE_PROJECT_ID }}
+          FIREBASE_AUTH_DOMAIN: ${{ secrets.FIREBASE_AUTH_DOMAIN }}
+          FIREBASE_STORAGE_BUCKET: ${{ secrets.FIREBASE_STORAGE_BUCKET }}
         run: |
-          cat > .env << EOF
-          GEMINI_API_KEY=${{ secrets.GEMINI_API_KEY }}
-          GEMINI_MODEL_ID=${{ secrets.GEMINI_MODEL_ID || 'gemini-1.5-flash' }}
-          FIREBASE_API_KEY=${{ secrets.FIREBASE_API_KEY }}
-          FIREBASE_APP_ID=${{ secrets.FIREBASE_APP_ID }}
-          FIREBASE_MESSAGING_SENDER_ID=${{ secrets.FIREBASE_MESSAGING_SENDER_ID }}
-          FIREBASE_PROJECT_ID=${{ secrets.FIREBASE_PROJECT_ID }}
-          FIREBASE_AUTH_DOMAIN=${{ secrets.FIREBASE_AUTH_DOMAIN }}
-          FIREBASE_STORAGE_BUCKET=${{ secrets.FIREBASE_STORAGE_BUCKET }}
+          python3 - << 'EOF'
+          import os
+
+          def env(key, fallback=''):
+              return os.environ.get(key, '') or fallback
+
+          lines = [
+              f"GEMINI_API_KEY={env('GEMINI_API_KEY')}",
+              f"GEMINI_MODEL_ID={env('GEMINI_MODEL_ID', 'gemini-1.5-flash')}",
+              f"FIREBASE_API_KEY={env('FIREBASE_API_KEY')}",
+              f"FIREBASE_APP_ID={env('FIREBASE_APP_ID')}",
+              f"FIREBASE_MESSAGING_SENDER_ID={env('FIREBASE_MESSAGING_SENDER_ID')}",
+              f"FIREBASE_PROJECT_ID={env('FIREBASE_PROJECT_ID')}",
+              f"FIREBASE_AUTH_DOMAIN={env('FIREBASE_AUTH_DOMAIN')}",
+              f"FIREBASE_STORAGE_BUCKET={env('FIREBASE_STORAGE_BUCKET')}",
+          ]
+          with open('.env', 'w') as f:
+              f.write('\n'.join(lines) + '\n')
+          print("✓ .env created")
           EOF
 
       - name: Create google-services.json
+        env:
+          FIREBASE_API_KEY: ${{ secrets.FIREBASE_API_KEY }}
+          FIREBASE_APP_ID: ${{ secrets.FIREBASE_APP_ID }}
+          FIREBASE_MESSAGING_SENDER_ID: ${{ secrets.FIREBASE_MESSAGING_SENDER_ID }}
+          FIREBASE_PROJECT_ID: ${{ secrets.FIREBASE_PROJECT_ID }}
+          FIREBASE_STORAGE_BUCKET: ${{ secrets.FIREBASE_STORAGE_BUCKET }}
         run: |
-          cat > android/app/google-services.json << EOF
-          {
-            "project_info": {
-              "project_number": "${{ secrets.FIREBASE_MESSAGING_SENDER_ID }}",
-              "project_id": "${{ secrets.FIREBASE_PROJECT_ID }}",
-              "storage_bucket": "${{ secrets.FIREBASE_STORAGE_BUCKET }}"
-            },
-            "client": [
-              {
-                "client_info": {
-                  "mobilesdk_app_id": "${{ secrets.FIREBASE_APP_ID }}",
-                  "android_client_info": {
-                    "package_name": "com.example.t_smart"
-                  }
-                },
-                "oauth_client": [],
-                "api_key": [
+          python3 - << 'EOF'
+          import os, json
+
+          def env(key, fallback=''):
+              return os.environ.get(key, '') or fallback
+
+          sender_id   = env('FIREBASE_MESSAGING_SENDER_ID', '000000000000')
+          project_id  = env('FIREBASE_PROJECT_ID',          'placeholder-project')
+          storage     = env('FIREBASE_STORAGE_BUCKET',      'placeholder-project.appspot.com')
+          api_key     = env('FIREBASE_API_KEY',             'placeholder-api-key')
+
+          # mobilesdk_app_id MUST follow format: 1:<sender_id>:android:<hex>
+          # If secret is missing, build a syntactically valid placeholder so
+          # the Google Services plugin doesn't reject the file.
+          raw_app_id = env('FIREBASE_APP_ID')
+          if raw_app_id and raw_app_id.startswith('1:'):
+              app_id = raw_app_id
+          else:
+              app_id = f"1:{sender_id}:android:0000000000000000"
+
+          config = {
+              "project_info": {
+                  "project_number": sender_id,
+                  "project_id": project_id,
+                  "storage_bucket": storage
+              },
+              "client": [
                   {
-                    "current_key": "${{ secrets.FIREBASE_API_KEY }}"
+                      "client_info": {
+                          "mobilesdk_app_id": app_id,
+                          "android_client_info": {
+                              "package_name": "com.example.t_smart"
+                          }
+                      },
+                      "oauth_client": [],
+                      "api_key": [{"current_key": api_key}],
+                      "services": {
+                          "appinvite_service": {
+                              "other_platform_oauth_client": []
+                          }
+                      }
                   }
-                ],
-                "services": {
-                  "appinvite_service": {
-                    "other_platform_oauth_client": []
-                  }
-                }
-              }
-            ],
-            "configuration_version": "1"
+              ],
+              "configuration_version": "1"
           }
+
+          with open('android/app/google-services.json', 'w') as f:
+              json.dump(config, f, indent=2)
+          print(f"✓ google-services.json created (app_id={app_id})")
           EOF
 
       - run: flutter pub get
