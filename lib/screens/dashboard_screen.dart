@@ -3,6 +3,7 @@ import 'package:flutter/material.dart';
 import 'package:go_router/go_router.dart';
 import 'package:provider/provider.dart';
 
+import '../models/performance_category.dart';
 import '../providers/t_smart_state.dart';
 import '../services/firebase/auth_service.dart';
 import '../widgets/summary_card.dart';
