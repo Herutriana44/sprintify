@@ -1053,15 +1053,7 @@ class _RecordingScreenState extends State<RecordingScreen> {
       return Stack(
         fit: StackFit.expand,
         children: [
-          // camera_android_camerax mem-mirror surface preview secara
-          // horizontal saat VideoCapture aktif (perekaman berjalan), sehingga
-          // preview tampak seperti cermin (vertical mirror) HANYA ketika
-          // merekam. Frame ImageAnalysis untuk pose detection tidak ikut
-          // ter-mirror, jadi cukup balik preview-nya agar orientasi kembali
-          // normal sekaligus tetap sejajar dengan skeleton overlay.
-          _recording
-              ? Transform.flip(flipX: true, child: CameraPreview(c))
-              : CameraPreview(c),
+          CameraPreview(c),
           CustomPaint(painter: DetectionAreaPainter()),
           // Preview: menunggu pelari masuk area sebelum rekaman dimulai.
           if (!_recording && _videoPath == null)
