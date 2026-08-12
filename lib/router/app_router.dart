@@ -1,5 +1,4 @@
-import 'package:firebase_auth/firebase_auth.dart';
-import 'package:flutter/foundation.dart';
+import 'package:flutter/material.dart';
 import 'package:go_router/go_router.dart';
 
 import '../screens/analysis_detail_screen.dart';
@@ -7,45 +6,21 @@ import '../screens/athlete_detail_screen.dart';
 import '../screens/athlete_form_screen.dart';
 import '../screens/athletes_screen.dart';
 import '../screens/dashboard_screen.dart';
-import '../screens/login_screen.dart';
 import '../screens/processing_screen.dart';
 import '../screens/recommendation_screen.dart';
 import '../screens/recording_screen.dart';
-import '../screens/register_screen.dart';
 import '../screens/result_screen.dart';
 import '../screens/results_history_screen.dart';
 import '../screens/splash_screen.dart';
 import '../screens/test_prep_screen.dart';
 
 GoRouter createAppRouter() {
-  final authNotifier = _AuthNotifier();
-
   return GoRouter(
     initialLocation: '/splash',
-    refreshListenable: authNotifier,
-    redirect: (context, state) {
-      final loggedIn = FirebaseAuth.instance.currentUser != null;
-      final loc = state.matchedLocation;
-      final onPublic =
-          loc == '/login' || loc == '/register' || loc == '/splash';
-
-      if (!loggedIn && !onPublic) return '/login';
-      if (loggedIn && loc == '/login') return '/dashboard';
-      if (loggedIn && loc == '/register') return '/dashboard';
-      return null;
-    },
     routes: [
       GoRoute(
         path: '/splash',
         builder: (context, state) => const SplashScreen(),
-      ),
-      GoRoute(
-        path: '/login',
-        builder: (context, state) => const LoginScreen(),
-      ),
-      GoRoute(
-        path: '/register',
-        builder: (context, state) => const RegisterScreen(),
       ),
       GoRoute(
         path: '/dashboard',
@@ -107,22 +82,4 @@ GoRouter createAppRouter() {
       ),
     ],
   );
-}
-
-/// Mendengarkan perubahan auth state Firebase dan memberi tahu GoRouter
-/// agar re-evaluasi redirect setiap kali status login berubah.
-class _AuthNotifier extends ChangeNotifier {
-  _AuthNotifier() {
-    _sub = FirebaseAuth.instance.authStateChanges().listen((_) {
-      notifyListeners();
-    });
-  }
-
-  late final dynamic _sub;
-
-  @override
-  void dispose() {
-    _sub.cancel();
-    super.dispose();
-  }
 }
