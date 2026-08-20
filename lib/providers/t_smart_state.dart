@@ -7,42 +7,32 @@ import '../models/run_result.dart';
 import '../models/test_mode.dart';
 
 class TSmartState extends ChangeNotifier {
-  TSmartState() {
-    _athletes.addAll(_seedAthletes);
-  }
-
+  // ── Local state ────────────────────────────────────────────────────────────
   final List<Athlete> _athletes = [];
   final List<RunResult> _history = [];
 
-  int _totalAttempts = 3;
+  int _totalAttempts = 0;
   RunResult? _lastRunResult;
   Athlete? _selectedAthlete;
   TestMode _testMode = TestMode.videoOnly;
-
-  /// Data analisis yang dikumpulkan dari layar rekaman,
-  /// menunggu diproses di [ProcessingScreen].
   PendingAnalysis? pendingAnalysis;
 
+  // ── Getters ────────────────────────────────────────────────────────────────
   List<Athlete> get athletes => List.unmodifiable(_athletes);
   List<RunResult> get history => List.unmodifiable(_history);
   int get totalAttempts => _totalAttempts;
   RunResult? get lastRunResult => _lastRunResult;
   Athlete? get selectedAthlete => _selectedAthlete;
   TestMode get testMode => _testMode;
+  bool get loading => false;
+  String? get error => null;
+
+  // ---------------------------------------------------------------------------
+  // Athletes
+  // ---------------------------------------------------------------------------
 
   void setSelectedAthlete(Athlete? athlete) {
     _selectedAthlete = athlete;
-    notifyListeners();
-  }
-
-  void setTestMode(TestMode mode) {
-    _testMode = mode;
-    notifyListeners();
-  }
-
-  /// Simpan data pending dari layar rekaman sebelum pindah ke processing.
-  void setPendingAnalysis(PendingAnalysis data) {
-    pendingAnalysis = data;
     notifyListeners();
   }
 
@@ -54,12 +44,13 @@ class TSmartState extends ChangeNotifier {
     }
   }
 
-  void addAthlete(Athlete athlete) {
+  Future<void> addAthlete(Athlete athlete) async {
     _athletes.add(athlete);
+    _selectedAthlete ??= athlete;
     notifyListeners();
   }
 
-  void updateAthlete(Athlete athlete) {
+  Future<void> updateAthlete(Athlete athlete) async {
     final i = _athletes.indexWhere((a) => a.id == athlete.id);
     if (i >= 0) {
       _athletes[i] = athlete;
@@ -67,23 +58,40 @@ class TSmartState extends ChangeNotifier {
     }
   }
 
-  void deleteAthlete(String id) {
+  Future<void> deleteAthlete(String id) async {
     _athletes.removeWhere((a) => a.id == id);
     if (_selectedAthlete?.id == id) {
-      _selectedAthlete = null;
+      _selectedAthlete = _athletes.isNotEmpty ? _athletes.first : null;
     }
     notifyListeners();
   }
 
-  /// Selesaikan analisis dengan hasil lengkap dari pipeline penilaian.
-  void completeRunWithFullResult({
+  // ---------------------------------------------------------------------------
+  // Test mode & pending analysis
+  // ---------------------------------------------------------------------------
+
+  void setTestMode(TestMode mode) {
+    _testMode = mode;
+    notifyListeners();
+  }
+
+  void setPendingAnalysis(PendingAnalysis data) {
+    pendingAnalysis = data;
+    notifyListeners();
+  }
+
+  // ---------------------------------------------------------------------------
+  // Complete run
+  // ---------------------------------------------------------------------------
+
+  Future<void> completeRunWithFullResult({
     required String aiAnalysis,
     required double? bersediaScore,
     required double? berlariScore,
     required List<String> recommendations,
     required int bersediaFrameCount,
     required int berlariFrameCount,
-  }) {
+  }) async {
     final athlete = _selectedAthlete;
     final pending = pendingAnalysis;
     if (athlete == null) return;
@@ -110,13 +118,15 @@ class TSmartState extends ChangeNotifier {
     );
 
     _lastRunResult = result;
-    _history.insert(0, result);
-    _totalAttempts += 1;
     pendingAnalysis = null;
+
+    _history.insert(0, result);
+    _totalAttempts = _history.length;
+
     notifyListeners();
   }
 
-  PerformanceCategory _categoryForScore(
+  static PerformanceCategory _categoryForScore(
       double? bersediaScore, double? berlariScore) {
     final avg = ((bersediaScore ?? 0) + (berlariScore ?? 0)) / 2;
     if (avg >= 75) return PerformanceCategory.baik;
@@ -124,20 +134,3 @@ class TSmartState extends ChangeNotifier {
     return PerformanceCategory.kurang;
   }
 }
-
-final _seedAthletes = [
-  Athlete(
-    id: 'a1',
-    name: 'Budi Santoso',
-    age: 16,
-    gender: 'Laki-laki',
-    className: 'X IPA 1',
-  ),
-  Athlete(
-    id: 'a2',
-    name: 'Siti Aminah',
-    age: 15,
-    gender: 'Perempuan',
-    className: 'X IPA 2',
-  ),
-];

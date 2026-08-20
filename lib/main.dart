@@ -8,20 +8,24 @@ import 'providers/t_smart_state.dart';
 Future<void> main() async {
   WidgetsFlutterBinding.ensureInitialized();
 
-  // Tangkap error Flutter
   FlutterError.onError = (FlutterErrorDetails details) {
     debugPrint('FLUTTER ERROR: ${details.exception}');
   };
 
   try {
     await dotenv.load(fileName: ".env");
+    debugPrint('✓ Environment variables loaded');
   } catch (e) {
-    debugPrint('DOTENV ERROR: $e');
+    debugPrint('⚠ Warning: Failed to load .env: $e');
   }
 
   runApp(
-    ChangeNotifierProvider<TSmartState>(
-      create: (_) => TSmartState(),
+    MultiProvider(
+      providers: [
+        ChangeNotifierProvider<TSmartState>(
+          create: (_) => TSmartState(),
+        ),
+      ],
       child: const TSmartApp(),
     ),
   );

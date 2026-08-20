@@ -13,7 +13,6 @@ class _ClassifyRequest {
   const _ClassifyRequest({
     required this.id,
     required this.landmarks,
-    required this.referencePoses,
   });
 
   /// ID unik request — dipakai untuk mencocokkan response.
@@ -21,10 +20,6 @@ class _ClassifyRequest {
 
   /// Landmark pose yang sudah diubah ke Map plain-Dart agar bisa di-transfer.
   final Map<String, Map<String, double>> landmarks;
-
-  /// Data referensi pose (dari JSON asset).
-  /// Hanya dikirim satu kali saat inisialisasi (id == -1).
-  final Map<String, dynamic>? referencePoses;
 }
 
 // ---------------------------------------------------------------------------
@@ -54,23 +49,14 @@ void _isolateEntry(SendPort mainSendPort) {
 
   PoseClassifier? classifier;
 
-  receivePort.listen((dynamic message) {
+  receivePort.listen((dynamic message) async {
     if (message is! _ClassifyRequest) return;
 
-    // Inisialisasi / update classifier bila referencePoses dikirim
-    if (message.referencePoses != null) {
-      classifier = PoseClassifier(referencePoses: message.referencePoses!);
-      // Pesan init (id == -1) tidak memerlukan response
-      if (message.id == -1) return;
-    }
-
+    // Init: buat classifier & load TFLite model (hanya sekali, id == -1)
     if (classifier == null) {
-      mainSendPort.send(ClassifyResult(
-        id: message.id,
-        label: PoseLabel.unknown,
-        score: 0,
-      ));
-      return;
+      classifier = PoseClassifier();
+      await classifier!.initialize();
+      if (message.id == -1) return;
     }
 
     final result = classifier!.classifyFromMap(message.landmarks);
@@ -91,7 +77,7 @@ void _isolateEntry(SendPort mainSendPort) {
 /// Pipeline:
 ///   Main isolate                       Classifier isolate
 ///   ───────────────────────────────    ────────────────────────
-///   ML Kit deteksi pose landmarks  →   (tidak dipakai)
+///   ML Kit deteksi pose landmarks  →   classifyFromMap()
 ///   serializePoseLandmarks()       →   classifyFromMap()
 ///   await Future<ClassifyResult>   ←   kirim ClassifyResult
 ///   update UI / accumulate scores
@@ -103,9 +89,9 @@ class ClassifierIsolate {
   int _nextId = 0;
   bool _ready = false;
 
-  /// Start isolate dan kirim data referensi pose.
+  /// Start isolate dan load TFLite model di background.
   /// Harus dipanggil sebelum [classify].
-  Future<void> start(Map<String, dynamic> referencePoses) async {
+  Future<void> start() async {
     _isolate = await Isolate.spawn(_isolateEntry, _receivePort.sendPort);
 
     final readyCompleter = Completer<void>();
@@ -113,11 +99,10 @@ class ClassifierIsolate {
     _receivePort.listen((dynamic message) {
       if (message is SendPort) {
         _sendPort = message;
-        // Kirim referensi pose ke isolate (init request, id = -1)
-        _sendPort!.send(_ClassifyRequest(
+        // Kirim init request (id = -1) agar isolate load TFLite model
+        _sendPort!.send(const _ClassifyRequest(
           id: -1,
-          landmarks: const {},
-          referencePoses: referencePoses,
+          landmarks: {},
         ));
         _ready = true;
         readyCompleter.complete();
@@ -141,7 +126,6 @@ class ClassifierIsolate {
     _sendPort!.send(_ClassifyRequest(
       id: id,
       landmarks: serializedLandmarks,
-      referencePoses: null,
     ));
 
     return completer.future;

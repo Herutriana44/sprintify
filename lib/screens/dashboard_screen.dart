@@ -13,6 +13,7 @@ class DashboardScreen extends StatelessWidget {
   Widget build(BuildContext context) {
     final state = context.watch<TSmartState>();
     final last = state.lastRunResult;
+
     final perf = last != null
         ? '${last.timeSeconds.toStringAsFixed(1)} d — ${last.category.label}'
         : 'Belum ada tes';
@@ -26,7 +27,7 @@ class DashboardScreen extends StatelessWidget {
           padding: const EdgeInsets.all(20),
           children: [
             Text(
-              'Halo, pelatih',
+              'Selamat datang',
               style: Theme.of(context).textTheme.headlineSmall?.copyWith(
                     fontWeight: FontWeight.w700,
                   ),
@@ -43,7 +44,7 @@ class DashboardScreen extends StatelessWidget {
               title: 'Total percobaan',
               value: '${state.totalAttempts}',
               icon: Icons.analytics_outlined,
-              subtitle: 'Akumulasi demo (mock)',
+              subtitle: 'Tersimpan di sesi ini',
             ),
             const SizedBox(height: 12),
             SummaryCard(

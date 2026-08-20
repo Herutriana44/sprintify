@@ -1,3 +1,4 @@
+import 'package:flutter/material.dart';
 import 'package:go_router/go_router.dart';
 
 import '../screens/analysis_detail_screen.dart';
@@ -5,11 +6,9 @@ import '../screens/athlete_detail_screen.dart';
 import '../screens/athlete_form_screen.dart';
 import '../screens/athletes_screen.dart';
 import '../screens/dashboard_screen.dart';
-import '../screens/login_screen.dart';
 import '../screens/processing_screen.dart';
 import '../screens/recommendation_screen.dart';
 import '../screens/recording_screen.dart';
-import '../screens/register_screen.dart';
 import '../screens/result_screen.dart';
 import '../screens/results_history_screen.dart';
 import '../screens/splash_screen.dart';
@@ -22,14 +21,6 @@ GoRouter createAppRouter() {
       GoRoute(
         path: '/splash',
         builder: (context, state) => const SplashScreen(),
-      ),
-      GoRoute(
-        path: '/login',
-        builder: (context, state) => const LoginScreen(),
-      ),
-      GoRoute(
-        path: '/register',
-        builder: (context, state) => const RegisterScreen(),
       ),
       GoRoute(
         path: '/dashboard',

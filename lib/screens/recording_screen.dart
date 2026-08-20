@@ -32,7 +32,6 @@ class RecordingScreen extends StatefulWidget {
 }
 
 class _RecordingScreenState extends State<RecordingScreen> {
-  final AnalysisService _analysisService = AnalysisService();
   BatchFrameProcessor? _batchProcessor;
   FrameSavingIsolate? _frameSavingIsolate;
 
@@ -45,6 +44,12 @@ class _RecordingScreenState extends State<RecordingScreen> {
   double _bestBersediaScore = -1;
   String? _bestBerlariFramePath;
   double _bestBerlariScore = -1;
+
+  // Sample frames — disimpan periodik saat pose terdeteksi
+  final List<String> _sampleFramePaths = [];
+  int _sampleFrameCounter = 0;
+  static const int _maxSampleFrames = 20; // simpan lebih banyak, nanti difilter ke 10
+  static const int _sampleFrameInterval = 5; // simpan tiap 5 frame pose
 
   String? _videoPath;
   bool _recording = false;
@@ -98,35 +103,16 @@ class _RecordingScreenState extends State<RecordingScreen> {
 
   Future<void> _initializeProcessors() async {
     try {
-      // Stage 1: load reference poses via analysis service
-      if (mounted) {
-        setState(() => _initStatusMessage = 'Memuat data referensi pose...');
-      }
-      await _analysisService.loadReferencePoses();
-
-      if (!_analysisService.isLoaded) {
-        throw Exception('Gagal memuat data referensi pose');
-      }
-
-      // Stage 2: parse reference poses JSON
-      if (mounted) {
-        setState(() =>
-            _initStatusMessage = 'Memuat konfigurasi referensi pose...');
-      }
-      final referencePoses = await _loadReferencePosesData();
-
-      // Stage 3: spin up batch processor (pose detection isolates + classifier)
+      // Stage 1: spin up batch processor (pose detection isolates + TFLite classifier)
       if (mounted) {
         setState(() => _initStatusMessage =
-            'Menginisialisasi threading isolate pose detection...');
+            'Menginisialisasi pose detection & classifier...');
       }
-      _batchProcessor = BatchFrameProcessor(
-        referencePoses: referencePoses,
-      );
+      _batchProcessor = BatchFrameProcessor();
       await _batchProcessor!.initialize();
       _addLog('Batch processor initialized', type: LogType.app);
 
-      // Stage 4: frame saving isolate untuk non-blocking I/O
+      // Stage 2: frame saving isolate untuk non-blocking I/O
       if (mounted) {
         setState(() =>
             _initStatusMessage = 'Menyiapkan penyimpan frame...');
@@ -152,16 +138,10 @@ class _RecordingScreenState extends State<RecordingScreen> {
     }
   }
 
-  Future<Map<String, dynamic>> _loadReferencePosesData() async {
-    final String response = await rootBundle.loadString('assets/data/reference_poses.json');
-    return json.decode(response)['reference_poses'] as Map<String, dynamic>;
-  }
-
   @override
   void dispose() {
     _timer?.cancel();
     _cameraManager.dispose();
-    _analysisService.dispose();
     _batchProcessor?.dispose();
     _frameSavingIsolate?.dispose();
     super.dispose();
@@ -220,6 +200,13 @@ class _RecordingScreenState extends State<RecordingScreen> {
       if (file != null) {
         setState(() => _videoPath = file.path);
         _addLog('Video dipilih: ${file.name}');
+
+        // Auto-trigger assessment setelah video dipilih dari galeri.
+        WidgetsBinding.instance.addPostFrameCallback((_) {
+          if (mounted && _videoPath != null) {
+            _finish();
+          }
+        });
       }
     } else if ((statuses[Permission.videos] ?? PermissionStatus.denied)
             .isPermanentlyDenied ||
@@ -390,6 +377,8 @@ class _RecordingScreenState extends State<RecordingScreen> {
     _bestBerlariScore = -1;
     _bestBersediaFramePath = null;
     _bestBerlariFramePath = null;
+    _sampleFramePaths.clear();
+    _sampleFrameCounter = 0;
   }
 
   // ---------------------------------------------------------------------------
@@ -462,6 +451,13 @@ class _RecordingScreenState extends State<RecordingScreen> {
               _bestBerlariScore = result.classification!.score;
               unawaited(_saveBestFrame(image, 'berlari', result.classification!.score));
             }
+          }
+
+          // Simpan sample frame periodik (tiap N frame pose terdeteksi)
+          _sampleFrameCounter++;
+          if (_sampleFrameCounter % _sampleFrameInterval == 0 &&
+              _sampleFramePaths.length < _maxSampleFrames) {
+            unawaited(_saveSampleFrame(image, result.classification!.label.name));
           }
         }
       }
@@ -552,6 +548,26 @@ class _RecordingScreenState extends State<RecordingScreen> {
     }
   }
 
+  /// Simpan sample frame periodik (non-blocking).
+  Future<void> _saveSampleFrame(CameraImage image, String label) async {
+    if (_frameSavingIsolate == null) return;
+
+    try {
+      final result = await _frameSavingIsolate!.saveFrame(
+        frameBytes: image.planes.first.bytes,
+        label: 'sample_$label',
+        timestamp: DateTime.now().millisecondsSinceEpoch,
+        outputDir: '/storage/emulated/0/Movies/T-Smart/frames',
+      );
+
+      if (result.success && result.path != null) {
+        _sampleFramePaths.add(result.path!);
+      }
+    } catch (e) {
+      debugPrint('Gagal menyimpan sample frame: $e');
+    }
+  }
+
   // ---------------------------------------------------------------------------
   // Recording toggle
   // ---------------------------------------------------------------------------
@@ -618,6 +634,13 @@ class _RecordingScreenState extends State<RecordingScreen> {
           if (!mounted) return;
           setState(() => _videoPath = savedFile.path);
           _addLog('Video disimpan di: $_videoPath', type: LogType.app);
+
+          // Auto-trigger assessment setelah rekaman selesai.
+          WidgetsBinding.instance.addPostFrameCallback((_) {
+            if (mounted && !_recording && _videoPath != null) {
+              _finish();
+            }
+          });
         }
       }
     } catch (e) {
@@ -683,6 +706,7 @@ class _RecordingScreenState extends State<RecordingScreen> {
       bestBerlariFrame: _bestBerlariFramePath != null
           ? File(_bestBerlariFramePath!)
           : null,
+      sampleFramePaths: List.unmodifiable(_sampleFramePaths),
     );
 
     if (!mounted) return;
@@ -945,13 +969,6 @@ class _RecordingScreenState extends State<RecordingScreen> {
                           icon: const Icon(Icons.photo_library),
                           tooltip: 'Pilih dari galeri',
                         ),
-                      const SizedBox(width: 8),
-                      Expanded(
-                        child: FilledButton(
-                          onPressed: _finish,
-                          child: const Text('Selesai & analisis'),
-                        ),
-                      ),
                     ],
                   ),
                 ],
@@ -1036,15 +1053,23 @@ class _RecordingScreenState extends State<RecordingScreen> {
       return Stack(
         fit: StackFit.expand,
         children: [
-          // camera_android_camerax mem-mirror surface preview secara
-          // horizontal saat VideoCapture aktif (perekaman berjalan), sehingga
-          // preview tampak seperti cermin (vertical mirror) HANYA ketika
-          // merekam. Frame ImageAnalysis untuk pose detection tidak ikut
-          // ter-mirror, jadi cukup balik preview-nya agar orientasi kembali
-          // normal sekaligus tetap sejajar dengan skeleton overlay.
-          _recording
-              ? Transform.flip(flipX: true, child: CameraPreview(c))
-              : CameraPreview(c),
+          // camera_android_camerax mem-mirror preview secara horizontal saat
+          // VideoCapture use case aktif (recording berjalan) pada kamera belakang.
+          // Kembalikan orientasi dengan Transform.flip hanya pada kondisi tersebut.
+          // Kamera depan tidak perlu flip tambahan karena CameraPreview sudah
+          // menangani mirror-nya sendiri.
+          Builder(builder: (context) {
+            final isBackCamera = _cameras.isNotEmpty &&
+                _selectedCameraIndex < _cameras.length &&
+                _cameras[_selectedCameraIndex].lensDirection ==
+                    CameraLensDirection.back;
+            final needsFlip =
+                _recording && Platform.isAndroid && isBackCamera;
+            final preview = CameraPreview(c);
+            return needsFlip
+                ? Transform.flip(flipX: true, child: preview)
+                : preview;
+          }),
           CustomPaint(painter: DetectionAreaPainter()),
           // Preview: menunggu pelari masuk area sebelum rekaman dimulai.
           if (!_recording && _videoPath == null)
@@ -1122,21 +1147,29 @@ class _RecordingScreenState extends State<RecordingScreen> {
             ),
           // Skeleton overlay pose detection
           if (_detectedLandmarks != null && _imageSize != null)
-            CustomPaint(
-              painter: SerializedPosePainter(
-                _detectedLandmarks!,
-                _imageSize!,
-                rotation: _cameras.isNotEmpty &&
-                        _selectedCameraIndex < _cameras.length
-                    ? _cameraManager.getRotation(
-                        _cameras[_selectedCameraIndex].sensorOrientation)
-                    : InputImageRotation.rotation90deg,
-                isFrontCamera: _cameras.isNotEmpty &&
-                    _selectedCameraIndex < _cameras.length &&
-                    _cameras[_selectedCameraIndex].lensDirection ==
-                        CameraLensDirection.front,
-              ),
-            ),
+            Builder(builder: (context) {
+              final isBack = _cameras.isNotEmpty &&
+                  _selectedCameraIndex < _cameras.length &&
+                  _cameras[_selectedCameraIndex].lensDirection ==
+                      CameraLensDirection.back;
+              return CustomPaint(
+                painter: SerializedPosePainter(
+                  _detectedLandmarks!,
+                  _imageSize!,
+                  rotation: _cameras.isNotEmpty &&
+                          _selectedCameraIndex < _cameras.length
+                      ? _cameraManager.getRotation(
+                          _cameras[_selectedCameraIndex].sensorOrientation)
+                      : InputImageRotation.rotation90deg,
+                  isFrontCamera: _cameras.isNotEmpty &&
+                      _selectedCameraIndex < _cameras.length &&
+                      _cameras[_selectedCameraIndex].lensDirection ==
+                          CameraLensDirection.front,
+                  isRecordingBackAndroid:
+                      _recording && Platform.isAndroid && isBack,
+                ),
+              );
+            }),
         ],
       );
     }
@@ -1194,12 +1227,14 @@ class SerializedPosePainter extends CustomPainter {
   final Size imageSize;
   final InputImageRotation rotation;
   final bool isFrontCamera;
+  final bool isRecordingBackAndroid;
 
   SerializedPosePainter(
     this.landmarks,
     this.imageSize, {
     this.rotation = InputImageRotation.rotation90deg,
     this.isFrontCamera = false,
+    this.isRecordingBackAndroid = false,
   });
 
   // Koneksi antar landmark untuk membentuk skeleton
@@ -1226,10 +1261,12 @@ class SerializedPosePainter extends CustomPainter {
     final double scaleX = size.width / imageSize.width;
     final double scaleY = size.height / imageSize.height;
 
-    // Kamera depan menampilkan preview yang di-mirror secara horizontal.
-    // Koordinat x dari ML Kit perlu di-flip agar skeleton selaras dengan tampilan.
+    // Kamera depan: CameraPreview sudah mirror horizontal → flip koordinat X.
+    // Kamera belakang Android saat recording: Transform.flip(flipX:true) diterapkan
+    // pada preview → skeleton juga perlu di-flip agar tetap selaras.
+    final bool shouldFlipX = isFrontCamera || isRecordingBackAndroid;
     double toX(double x) =>
-        isFrontCamera ? size.width - x * scaleX : x * scaleX;
+        shouldFlipX ? size.width - x * scaleX : x * scaleX;
     double toY(double y) => y * scaleY;
 
     // Gambar koneksi antar landmark (skeleton)
@@ -1274,7 +1311,8 @@ class SerializedPosePainter extends CustomPainter {
   @override
   bool shouldRepaint(SerializedPosePainter oldDelegate) =>
       landmarks != oldDelegate.landmarks ||
-      isFrontCamera != oldDelegate.isFrontCamera;
+      isFrontCamera != oldDelegate.isFrontCamera ||
+      isRecordingBackAndroid != oldDelegate.isRecordingBackAndroid;
 }
 
 class DetectionAreaPainter extends CustomPainter {
