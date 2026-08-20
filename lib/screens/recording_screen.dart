@@ -1053,7 +1053,23 @@ class _RecordingScreenState extends State<RecordingScreen> {
       return Stack(
         fit: StackFit.expand,
         children: [
-          CameraPreview(c),
+          // camera_android_camerax mem-mirror preview secara horizontal saat
+          // VideoCapture use case aktif (recording berjalan) pada kamera belakang.
+          // Kembalikan orientasi dengan Transform.flip hanya pada kondisi tersebut.
+          // Kamera depan tidak perlu flip tambahan karena CameraPreview sudah
+          // menangani mirror-nya sendiri.
+          Builder(builder: (context) {
+            final isBackCamera = _cameras.isNotEmpty &&
+                _selectedCameraIndex < _cameras.length &&
+                _cameras[_selectedCameraIndex].lensDirection ==
+                    CameraLensDirection.back;
+            final needsFlip =
+                _recording && Platform.isAndroid && isBackCamera;
+            final preview = CameraPreview(c);
+            return needsFlip
+                ? Transform.flip(flipX: true, child: preview)
+                : preview;
+          }),
           CustomPaint(painter: DetectionAreaPainter()),
           // Preview: menunggu pelari masuk area sebelum rekaman dimulai.
           if (!_recording && _videoPath == null)
@@ -1131,21 +1147,29 @@ class _RecordingScreenState extends State<RecordingScreen> {
             ),
           // Skeleton overlay pose detection
           if (_detectedLandmarks != null && _imageSize != null)
-            CustomPaint(
-              painter: SerializedPosePainter(
-                _detectedLandmarks!,
-                _imageSize!,
-                rotation: _cameras.isNotEmpty &&
-                        _selectedCameraIndex < _cameras.length
-                    ? _cameraManager.getRotation(
-                        _cameras[_selectedCameraIndex].sensorOrientation)
-                    : InputImageRotation.rotation90deg,
-                isFrontCamera: _cameras.isNotEmpty &&
-                    _selectedCameraIndex < _cameras.length &&
-                    _cameras[_selectedCameraIndex].lensDirection ==
-                        CameraLensDirection.front,
-              ),
-            ),
+            Builder(builder: (context) {
+              final isBack = _cameras.isNotEmpty &&
+                  _selectedCameraIndex < _cameras.length &&
+                  _cameras[_selectedCameraIndex].lensDirection ==
+                      CameraLensDirection.back;
+              return CustomPaint(
+                painter: SerializedPosePainter(
+                  _detectedLandmarks!,
+                  _imageSize!,
+                  rotation: _cameras.isNotEmpty &&
+                          _selectedCameraIndex < _cameras.length
+                      ? _cameraManager.getRotation(
+                          _cameras[_selectedCameraIndex].sensorOrientation)
+                      : InputImageRotation.rotation90deg,
+                  isFrontCamera: _cameras.isNotEmpty &&
+                      _selectedCameraIndex < _cameras.length &&
+                      _cameras[_selectedCameraIndex].lensDirection ==
+                          CameraLensDirection.front,
+                  isRecordingBackAndroid:
+                      _recording && Platform.isAndroid && isBack,
+                ),
+              );
+            }),
         ],
       );
     }
@@ -1203,12 +1227,14 @@ class SerializedPosePainter extends CustomPainter {
   final Size imageSize;
   final InputImageRotation rotation;
   final bool isFrontCamera;
+  final bool isRecordingBackAndroid;
 
   SerializedPosePainter(
     this.landmarks,
     this.imageSize, {
     this.rotation = InputImageRotation.rotation90deg,
     this.isFrontCamera = false,
+    this.isRecordingBackAndroid = false,
   });
 
   // Koneksi antar landmark untuk membentuk skeleton
@@ -1235,10 +1261,12 @@ class SerializedPosePainter extends CustomPainter {
     final double scaleX = size.width / imageSize.width;
     final double scaleY = size.height / imageSize.height;
 
-    // Kamera depan menampilkan preview yang di-mirror secara horizontal.
-    // Koordinat x dari ML Kit perlu di-flip agar skeleton selaras dengan tampilan.
+    // Kamera depan: CameraPreview sudah mirror horizontal → flip koordinat X.
+    // Kamera belakang Android saat recording: Transform.flip(flipX:true) diterapkan
+    // pada preview → skeleton juga perlu di-flip agar tetap selaras.
+    final bool shouldFlipX = isFrontCamera || isRecordingBackAndroid;
     double toX(double x) =>
-        isFrontCamera ? size.width - x * scaleX : x * scaleX;
+        shouldFlipX ? size.width - x * scaleX : x * scaleX;
     double toY(double y) => y * scaleY;
 
     // Gambar koneksi antar landmark (skeleton)
@@ -1283,7 +1311,8 @@ class SerializedPosePainter extends CustomPainter {
   @override
   bool shouldRepaint(SerializedPosePainter oldDelegate) =>
       landmarks != oldDelegate.landmarks ||
-      isFrontCamera != oldDelegate.isFrontCamera;
+      isFrontCamera != oldDelegate.isFrontCamera ||
+      isRecordingBackAndroid != oldDelegate.isRecordingBackAndroid;
 }
 
 class DetectionAreaPainter extends CustomPainter {
