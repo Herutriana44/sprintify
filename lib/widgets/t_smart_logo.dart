@@ -14,21 +14,11 @@ class TSmartLogo extends StatelessWidget {
         Container(
           width: size,
           height: size,
-          decoration: BoxDecoration(
-            color: scheme.primaryContainer,
-            borderRadius: BorderRadius.circular(size * 0.22),
-            boxShadow: [
-              BoxShadow(
-                color: scheme.primary.withValues(alpha: 0.25),
-                blurRadius: 16,
-                offset: const Offset(0, 8),
-              ),
-            ],
-          ),
-          child: Icon(
-            Icons.directions_run_rounded,
-            size: size * 0.55,
-            color: scheme.primary,
+          decoration: const BoxDecoration(
+            image: DecorationImage(
+              image: AssetImage('assets/logo-tsmart.png'),
+              fit: BoxFit.contain,
+            ),
           ),
         ),
         const SizedBox(height: 12),

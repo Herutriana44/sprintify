@@ -89,6 +89,7 @@ flutter:
     - assets/data/reference_poses.json
     - assets/models/pose_labels.json
     - assets/models/pose_classifier.tflite
+    - assets/logo-tsmart.png
     - .env
 
   # To add custom fonts to your application, add a fonts section here,
