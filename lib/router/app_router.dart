@@ -23,19 +23,19 @@ GoRouter createAppRouter() {
     routes: [
       GoRoute(
         path: '/splash',
+        builder: (context, state) => const SplashScreen(),
+      ),
       GoRoute(
         path: '/login',
         builder: (context, state) => const LoginScreen(),
       ),
       GoRoute(
         path: '/role-selection',
+        builder: (context, state) => const RoleSelectionScreen(),
+      ),
       GoRoute(
         path: '/connect',
         builder: (context, state) => const ConnectScreen(),
-      ),
-        builder: (context, state) => const RoleSelectionScreen(),
-      ),
-        builder: (context, state) => const SplashScreen(),
       ),
       GoRoute(
         path: '/dashboard',

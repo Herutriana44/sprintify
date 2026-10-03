@@ -2,7 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter_dotenv/flutter_dotenv.dart';
 import 'package:provider/provider.dart';
 import 'package:firebase_core/firebase_core.dart';
-import 'package:sprintify/firebase_options.dart';
+import 'package:t_smart/firebase_options.dart';
 
 import 'app.dart';
 import 'providers/t_smart_state.dart';

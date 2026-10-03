@@ -43,7 +43,7 @@ class TSmartState extends ChangeNotifier {
   String? get idConnect => _idConnect;
   bool get startStatus => _startStatus;
   DateTime? get startDateTime => _startDateTime;
-  bool get finishStatus => _finishDateTime;
+  bool get finishStatus => _finishStatus;
 
 
   // ---------------------------------------------------------------------------
