@@ -13,6 +13,9 @@ import '../screens/result_screen.dart';
 import '../screens/results_history_screen.dart';
 import '../screens/splash_screen.dart';
 import '../screens/test_prep_screen.dart';
+import '../screens/login_screen.dart';
+import '../screens/role_selection_screen.dart';
+import '../screens/connect_screen.dart';
 
 GoRouter createAppRouter() {
   return GoRouter(
@@ -20,6 +23,18 @@ GoRouter createAppRouter() {
     routes: [
       GoRoute(
         path: '/splash',
+      GoRoute(
+        path: '/login',
+        builder: (context, state) => const LoginScreen(),
+      ),
+      GoRoute(
+        path: '/role-selection',
+      GoRoute(
+        path: '/connect',
+        builder: (context, state) => const ConnectScreen(),
+      ),
+        builder: (context, state) => const RoleSelectionScreen(),
+      ),
         builder: (context, state) => const SplashScreen(),
       ),
       GoRoute(

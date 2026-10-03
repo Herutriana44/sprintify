@@ -3,6 +3,9 @@ import 'package:flutter/foundation.dart'
 import 'package:flutter/material.dart';
 import 'package:go_router/go_router.dart';
 import 'package:permission_handler/permission_handler.dart';
+import 'package:firebase_auth/firebase_auth.dart'; // Added
+import 'package:provider/provider.dart'; // Added
+import '../providers/t_smart_state.dart'; // Added
 
 import '../widgets/t_smart_logo.dart';
 
@@ -26,7 +29,31 @@ class _SplashScreenState extends State<SplashScreen> {
       Future<void>.delayed(const Duration(milliseconds: 1800)),
     ]);
     if (!mounted) return;
-    context.go('/dashboard');
+
+    final auth = FirebaseAuth.instance;
+    final smartState = Provider.of<TSmartState>(context, listen: false);
+
+    if (auth.currentUser == null) {
+      // User not logged in, go to login screen
+      context.go('/login');
+    } else {
+      // User is logged in, set account ID and check role
+      smartState.setCurrentAccountId(auth.currentUser!.uid);
+      final role = smartState.deviceRole;
+      if (role == null) {
+        // Role not set, go to role selection
+        context.go('/role-selection');
+      } else if (role == 'start') {
+        // Go to start-related screen (e.g., dashboard or a specific start screen)
+        context.go('/dashboard'); // Or a dedicated start screen if exists
+      } else if (role == 'finish') {
+        // Go to finish-related screen (e.g., dashboard or a specific finish screen)
+        context.go('/dashboard'); // Or a dedicated finish screen if exists
+      } else {
+        // Unknown role, treat as not logged in/configured
+        context.go('/login');
+      }
+    }
   }
 
   Future<void> _requestAllPermissions() async {
@@ -76,3 +103,4 @@ class _SplashScreenState extends State<SplashScreen> {
     );
   }
 }
+

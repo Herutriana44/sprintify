@@ -1,4 +1,6 @@
 import 'package:flutter/foundation.dart';
+import 'package:firebase_auth/firebase_auth.dart';
+import 'package:firebase_database/firebase_database.dart';
 
 import '../models/athlete.dart';
 import '../models/pending_analysis.dart';
@@ -17,6 +19,15 @@ class TSmartState extends ChangeNotifier {
   TestMode _testMode = TestMode.videoOnly;
   PendingAnalysis? pendingAnalysis;
 
+  // ── Two-device specific state ──────────────────────────────────────────────
+  String? _currentAccountId;
+  String? _deviceRole; // "start" or "finish"
+  String? _idConnect;
+  bool _startStatus = false;
+  DateTime? _startDateTime;
+  bool _finishStatus = false;
+  DateTime? _finishDateTime;
+
   // ── Getters ────────────────────────────────────────────────────────────────
   List<Athlete> get athletes => List.unmodifiable(_athletes);
   List<RunResult> get history => List.unmodifiable(_history);
@@ -26,6 +37,46 @@ class TSmartState extends ChangeNotifier {
   TestMode get testMode => _testMode;
   bool get loading => false;
   String? get error => null;
+  // Two-device specific getters
+  String? get currentAccountId => _currentAccountId;
+  String? get deviceRole => _deviceRole;
+  String? get idConnect => _idConnect;
+  bool get startStatus => _startStatus;
+  DateTime? get startDateTime => _startDateTime;
+  bool get finishStatus => _finishDateTime;
+
+
+  // ---------------------------------------------------------------------------
+  // Two-device specific setters
+  // ---------------------------------------------------------------------------
+
+  void setCurrentAccountId(String? id) {
+    _currentAccountId = id;
+    notifyListeners();
+  }
+
+  void setDeviceRole(String? role) {
+    _deviceRole = role;
+    notifyListeners();
+  }
+
+  void setIdConnect(String? id) {
+    _idConnect = id;
+    notifyListeners();
+  }
+
+  void setStartStatus(bool status) {
+    _startStatus = status;
+    if (status) _startDateTime = DateTime.now();
+    notifyListeners();
+  }
+
+  void setFinishStatus(bool status) {
+    _finishStatus = status;
+    if (status) _finishDateTime = DateTime.now();
+    notifyListeners();
+  }
+
 
   // ---------------------------------------------------------------------------
   // Athletes
@@ -134,3 +185,4 @@ class TSmartState extends ChangeNotifier {
     return PerformanceCategory.kurang;
   }
 }
+

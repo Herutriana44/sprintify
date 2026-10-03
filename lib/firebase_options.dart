@@ -14,5 +14,6 @@ class DefaultFirebaseOptions {
         projectId: dotenv.get('FIREBASE_PROJECT_ID', fallback: ''),
         authDomain: dotenv.get('FIREBASE_AUTH_DOMAIN', fallback: ''),
         storageBucket: dotenv.get('FIREBASE_STORAGE_BUCKET', fallback: ''),
+        databaseURL: dotenv.get('FIREBASE_DATABASE_URL', fallback: ''),
       );
 }

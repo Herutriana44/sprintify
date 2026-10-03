@@ -1,6 +1,8 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_dotenv/flutter_dotenv.dart';
 import 'package:provider/provider.dart';
+import 'package:firebase_core/firebase_core.dart';
+import 'package:sprintify/firebase_options.dart';
 
 import 'app.dart';
 import 'providers/t_smart_state.dart';
@@ -19,6 +21,13 @@ Future<void> main() async {
     debugPrint('⚠ Warning: Failed to load .env: $e');
   }
 
+  // Initialize Firebase after loading .env
+  await Firebase.initializeApp(
+    options: DefaultFirebaseOptions.currentPlatform,
+  );
+  debugPrint('✓ Firebase initialized');
+
+
   runApp(
     MultiProvider(
       providers: [
@@ -30,3 +39,4 @@ Future<void> main() async {
     ),
   );
 }
+
