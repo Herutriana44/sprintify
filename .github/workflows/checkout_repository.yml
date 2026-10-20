@@ -1,11 +1,19 @@
-steps:
-  - name: Checkout repository
-    uses: actions/checkout@v4
+name: Export Secrets to Env
 
-  - name: Make envfile
-    uses: SpicyPizza/create-envfile@v2.0.3
-    with:
-      env_key.DB_HOST: ${{ secrets.DB_HOST }}
-      env_key.DB_USER: ${{ secrets.DB_USER }}
-      env_key.DB_PASS: ${{ secrets.DB_PASS }}
-      file_name: .env
+on:
+  workflow_dispatch: # Bisa dijalankan secara manual dari tab Actions
+
+jobs:
+  create-env:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Make envfile
+        uses: SpicyPizza/create-envfile@v2.0.3
+        with:
+          env_key.DB_HOST: ${{ secrets.DB_HOST }}
+          env_key.DB_USER: ${{ secrets.DB_USER }}
+          env_key.DB_PASS: ${{ secrets.DB_PASS }}
+          file_name: .env
