@@ -1,7 +1,10 @@
 name: Export Secrets to Env
 
 on:
-  workflow_dispatch: # Bisa dijalankan secara manual dari tab Actions
+  push:
+    branches:
+      - 2-device-needed # Ganti dengan 'master' atau nama branch utama Anda jika berbeda
+  workflow_dispatch: # Tetap dipertahankan agar bisa dijalankan manual juga
 
 jobs:
   create-env:
