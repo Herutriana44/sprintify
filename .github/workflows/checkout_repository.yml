@@ -3,8 +3,8 @@ name: Export Secrets to Env
 on:
   push:
     branches:
-      - 2-device-needed # Ganti dengan 'master' atau nama branch utama Anda jika berbeda
-  workflow_dispatch: # Tetap dipertahankan agar bisa dijalankan manual juga
+      - 2-device-needed
+  workflow_dispatch:
 
 jobs:
   create-env:
@@ -20,3 +20,9 @@ jobs:
           env_key.DB_USER: ${{ secrets.DB_USER }}
           env_key.DB_PASS: ${{ secrets.DB_PASS }}
           file_name: .env
+
+      - name: Upload .env as Artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: env-file
+          path: .env
