@@ -1,5 +1,4 @@
 import 'package:google_mlkit_pose_detection/google_mlkit_pose_detection.dart';
-import 'package:flutter/material.dart';
 
 class PoseManager {
   final PoseDetector _poseDetector = PoseDetector(options: PoseDetectorOptions());

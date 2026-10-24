@@ -1,6 +1,4 @@
 import 'package:flutter/foundation.dart';
-import 'package:firebase_auth/firebase_auth.dart';
-import 'package:firebase_database/firebase_database.dart';
 
 import '../models/athlete.dart';
 import '../models/pending_analysis.dart';
@@ -44,6 +42,7 @@ class TSmartState extends ChangeNotifier {
   bool get startStatus => _startStatus;
   DateTime? get startDateTime => _startDateTime;
   bool get finishStatus => _finishStatus;
+  DateTime? get finishDateTime => _finishDateTime;
 
 
   // ---------------------------------------------------------------------------

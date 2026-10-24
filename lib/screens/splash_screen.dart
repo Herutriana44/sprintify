@@ -59,7 +59,7 @@ class _SplashScreenState extends State<SplashScreen> {
   Future<void> _requestAllPermissions() async {
     if (kIsWeb) return;
     if (defaultTargetPlatform != TargetPlatform.android &&
-        defaultTargetPlatform != TargetPlatform.iOS) return;
+        defaultTargetPlatform != TargetPlatform.iOS) { return; }
     try {
       await [
         Permission.camera,

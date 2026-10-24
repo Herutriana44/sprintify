@@ -1,5 +1,4 @@
 import 'dart:async';
-import 'dart:convert';
 import 'dart:io';
 
 import 'package:camera/camera.dart';
@@ -22,7 +21,6 @@ import '../services/camera/camera_manager.dart';
 import '../services/logger_service.dart';
 import '../services/analysis/analysis_service.dart';
 import '../services/analysis/batch_frame_processor.dart';
-import 'assessment_waiting_screen.dart';
 
 class RecordingScreen extends StatefulWidget {
   const RecordingScreen({super.key});
@@ -66,6 +64,7 @@ class _RecordingScreenState extends State<RecordingScreen> {
   String? _cameraError;
 
   bool _isBusy = false;
+  // ignore: unused_field
   int _nullFrameCount = 0;   // debug counter: berapa frame yang return null
   Map<String, Map<String, double>>? _detectedLandmarks;
   Size? _imageSize;
@@ -572,6 +571,7 @@ class _RecordingScreenState extends State<RecordingScreen> {
   // Recording toggle
   // ---------------------------------------------------------------------------
 
+  // ignore: unused_element
   Future<void> _toggle() async {
     if (_cameraLive) {
       await _toggleVideoRecording();
@@ -988,17 +988,14 @@ class _RecordingScreenState extends State<RecordingScreen> {
                               fontSize: 10, fontWeight: FontWeight.bold)),
                       IconButton(
                         icon: const Icon(Icons.copy, size: 16),
-                        onPressed: () {
-                          Clipboard.setData(
-                                  ClipboardData(
-                                      text: _logHistory.join('\n')))
-                              .then((_) {
-                            ScaffoldMessenger.of(context).showSnackBar(
-                              const SnackBar(
-                                  content:
-                                      Text('Log disalin ke clipboard')),
-                            );
-                          });
+                        onPressed: () async {
+                          await Clipboard.setData(
+                              ClipboardData(text: _logHistory.join('\n')));
+                          if (!context.mounted) return;
+                          ScaffoldMessenger.of(context).showSnackBar(
+                            const SnackBar(
+                                content: Text('Log disalin ke clipboard')),
+                          );
                         },
                       ),
                     ],

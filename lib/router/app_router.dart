@@ -1,4 +1,3 @@
-import 'package:flutter/material.dart';
 import 'package:go_router/go_router.dart';
 
 import '../screens/analysis_detail_screen.dart';
@@ -14,6 +13,7 @@ import '../screens/results_history_screen.dart';
 import '../screens/splash_screen.dart';
 import '../screens/test_prep_screen.dart';
 import '../screens/login_screen.dart';
+import '../screens/register_screen.dart';
 import '../screens/role_selection_screen.dart';
 import '../screens/connect_screen.dart';
 
@@ -28,6 +28,10 @@ GoRouter createAppRouter() {
       GoRoute(
         path: '/login',
         builder: (context, state) => const LoginScreen(),
+      ),
+      GoRoute(
+        path: '/register',
+        builder: (context, state) => const RegisterScreen(),
       ),
       GoRoute(
         path: '/role-selection',

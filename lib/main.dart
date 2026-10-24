@@ -6,6 +6,7 @@ import 'package:t_smart/firebase_options.dart';
 
 import 'app.dart';
 import 'providers/t_smart_state.dart';
+import 'services/firebase/auth_service.dart';
 
 Future<void> main() async {
   WidgetsFlutterBinding.ensureInitialized();
@@ -33,6 +34,9 @@ Future<void> main() async {
       providers: [
         ChangeNotifierProvider<TSmartState>(
           create: (_) => TSmartState(),
+        ),
+        ChangeNotifierProvider<AuthService>(
+          create: (_) => AuthService(),
         ),
       ],
       child: const TSmartApp(),

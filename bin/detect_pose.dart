@@ -41,7 +41,7 @@ Future<void> main(List<String> args) async {
       final image = img.decodeImage(rawBytes);
       if (image != null) {
         for (final landmark in pose.landmarks.values) {
-          img.drawCircle(image, landmark.x.toInt(), landmark.y.toInt(), 5, img.ColorRgb8(255, 0, 0));
+          img.drawCircle(image, x: landmark.x.toInt(), y: landmark.y.toInt(), radius: 5, color: img.ColorRgb8(255, 0, 0));
         }
         
         final outputPath = 'output_annotated_${DateTime.now().millisecondsSinceEpoch}.jpg';

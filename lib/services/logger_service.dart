@@ -25,7 +25,6 @@ class LoggerService {
       case LogType.evaluation:
         return File('${dir.path}/EVALUATION.log');
       case LogType.app:
-      default:
         return File('${dir.path}/APP.log');
     }
   }

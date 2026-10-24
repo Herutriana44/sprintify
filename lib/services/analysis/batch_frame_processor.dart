@@ -29,6 +29,7 @@ class BatchFrameProcessor {
   BatchFrameProcessor({Map<String, dynamic>? referencePoses})
       : _referencePoses = referencePoses;
 
+  // ignore: unused_field
   final Map<String, dynamic>? _referencePoses; // Kept for backwards compatibility but unused
 
   PoseDetectionPool? _posePool;
