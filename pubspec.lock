@@ -45,34 +45,34 @@ packages:
     dependency: "direct main"
     description:
       name: camera
-      sha256: "034c38cb8014d29698dcae6d20276688a1bf74e6487dfeb274d70ea05d5f7777"
+      sha256: "3f30ca0ff376f91534f23afa2a7aea06ebb6c889fd9e260642437b37e3d9f753"
       url: "https://pub.dev"
     source: hosted
-    version: "0.12.0+1"
+    version: "0.12.1"
   camera_android_camerax:
     dependency: transitive
     description:
       name: camera_android_camerax
-      sha256: "2c178975759aac0f0ef7ce1ec698b6e2acd792127ea7f38fa79a424fbebeae7f"
+      sha256: faf885ca8140f22df8dc05d1839afc702d0329dd9b0b2f0bc6f9b05f3f20e10c
       url: "https://pub.dev"
     source: hosted
-    version: "0.7.1+2"
+    version: "0.7.6"
   camera_avfoundation:
     dependency: transitive
     description:
       name: camera_avfoundation
-      sha256: "90e4cc3fde331581a3b2d35d83be41dbb7393af0ab857eb27b732174289cb96d"
+      sha256: e409a731fad3fca10daa9567cf981720398659e6390f871a4e0f576058ff8940
       url: "https://pub.dev"
     source: hosted
-    version: "0.10.1"
+    version: "0.10.3+1"
   camera_platform_interface:
     dependency: transitive
     description:
       name: camera_platform_interface
-      sha256: "98cfc9357e04bad617671b4c1f78a597f25f08003089dd94050709ae54effc63"
+      sha256: b3083b183ef1daa408d5f0c98c8c7ac0325b490695fb4557ff4210fcf04c5984
       url: "https://pub.dev"
     source: hosted
-    version: "2.12.0"
+    version: "2.15.0"
   camera_web:
     dependency: transitive
     description:
@@ -568,14 +568,6 @@ packages:
       url: "https://pub.dev"
     source: hosted
     version: "6.1.0"
-  listen:
-    dependency: transitive
-    description:
-      name: listen
-      sha256: "47501a08016a43fcad79252439d723f50f14f88fa7bfd8a177e0a417e5c9e1f2"
-      url: "https://pub.dev"
-    source: hosted
-    version: "1.0.1"
   logging:
     dependency: transitive
     description:
@@ -857,10 +849,10 @@ packages:
     dependency: transitive
     description:
       name: test_api
-      sha256: "47481c58bb92d0b1d218f0510ff5647e768f8e1256d07077a151fb520923b51d"
+      sha256: "2a122cbe059f8b610d3a5415f42e255b6c17b1f21eee1d960f31080237fb4f11"
       url: "https://pub.dev"
     source: hosted
-    version: "0.7.15"
+    version: "0.7.12"
   tflite_flutter:
     dependency: "direct main"
     description:
