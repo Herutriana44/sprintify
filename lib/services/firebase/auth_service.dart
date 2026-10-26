@@ -42,9 +42,9 @@ class AuthService extends ChangeNotifier {
       await _postLoginSetup(cred.user!);
       return AuthResult.success(cred.user!);
     } on FirebaseAuthException catch (e) {
-      return AuthResult.failure(_friendlyError(e.code));
+      return AuthResult.failure('[${e.code}] ${e.message ?? e.code}');
     } catch (e) {
-      return AuthResult.failure('Terjadi kesalahan: $e');
+      return AuthResult.failure(e.toString());
     }
   }
 
@@ -62,9 +62,9 @@ class AuthService extends ChangeNotifier {
       await _postLoginSetup(cred.user!, name: name.trim());
       return AuthResult.success(cred.user!);
     } on FirebaseAuthException catch (e) {
-      return AuthResult.failure(_friendlyError(e.code));
+      return AuthResult.failure('[${e.code}] ${e.message ?? e.code}');
     } catch (e) {
-      return AuthResult.failure('Terjadi kesalahan: $e');
+      return AuthResult.failure(e.toString());
     }
   }
 
@@ -87,9 +87,9 @@ class AuthService extends ChangeNotifier {
       await _postLoginSetup(cred.user!, name: googleUser.displayName);
       return AuthResult.success(cred.user!);
     } on FirebaseAuthException catch (e) {
-      return AuthResult.failure(_friendlyError(e.code));
+      return AuthResult.failure('[${e.code}] ${e.message ?? e.code}');
     } catch (e) {
-      return AuthResult.failure('Terjadi kesalahan: $e');
+      return AuthResult.failure(e.toString());
     }
   }
 
@@ -137,34 +137,6 @@ class AuthService extends ChangeNotifier {
     notifyListeners();
   }
 
-  // ---------------------------------------------------------------------------
-  // Error messages (Bahasa Indonesia)
-  // ---------------------------------------------------------------------------
-
-  static String _friendlyError(String code) {
-    switch (code) {
-      case 'user-not-found':
-        return 'Email tidak terdaftar.';
-      case 'wrong-password':
-      case 'invalid-credential':
-        return 'Email atau kata sandi salah.';
-      case 'email-already-in-use':
-        return 'Email sudah digunakan oleh akun lain.';
-      case 'weak-password':
-        return 'Kata sandi terlalu lemah (minimal 6 karakter).';
-      case 'invalid-email':
-        return 'Format email tidak valid.';
-      case 'too-many-requests':
-        return 'Terlalu banyak percobaan. Coba lagi nanti.';
-      case 'network-request-failed':
-        return 'Tidak ada koneksi internet.';
-      case 'user-disabled':
-        return 'Akun ini telah dinonaktifkan.';
-      default:
-        debugPrint('AuthService._friendlyError: unhandled code=$code');
-        return 'Terjadi kesalahan. Coba lagi.';
-    }
-  }
 }
 
 /// Hasil operasi autentikasi.

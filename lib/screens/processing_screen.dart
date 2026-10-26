@@ -263,7 +263,7 @@ Berikan evaluasi singkat (3–4 kalimat) tentang teknik keseluruhan atlet, lalu 
         _addLog('Rate limit: ${e.message}', level: _LogLevel.warning);
       } else {
         aiAnalysis =
-            'Analisis AI tidak tersedia saat ini. Silakan periksa koneksi internet dan GEMINI_API_KEY.';
+            'Analisis AI gagal: $e';
         _addLog('Gemini gagal: $e', level: _LogLevel.error);
       }
       _addLog(
