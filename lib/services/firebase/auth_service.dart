@@ -17,7 +17,8 @@ class AuthService extends ChangeNotifier {
   final FirebaseAuth _auth;
   final FirestoreService _firestoreService;
   final FirestoreMigration _migration;
-  final GoogleSignIn _googleSignIn = GoogleSignIn();
+  GoogleSignIn? _googleSignIn;
+  GoogleSignIn get _gsi => _googleSignIn ??= GoogleSignIn();
 
   User? get currentUser => _auth.currentUser;
   bool get isLoggedIn => _auth.currentUser != null;
@@ -73,7 +74,7 @@ class AuthService extends ChangeNotifier {
 
   Future<AuthResult> signInWithGoogle() async {
     try {
-      final googleUser = await _googleSignIn.signIn();
+      final googleUser = await _gsi.signIn();
       if (googleUser == null) {
         return AuthResult.failure('Login Google dibatalkan.');
       }
@@ -99,7 +100,7 @@ class AuthService extends ChangeNotifier {
   Future<void> signOut() async {
     await Future.wait([
       _auth.signOut(),
-      _googleSignIn.signOut(),
+      _gsi.signOut(),
     ]);
     notifyListeners();
   }

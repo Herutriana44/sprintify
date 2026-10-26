@@ -129,6 +129,7 @@ class _RegisterScreenState extends State<RegisterScreen> {
                   controller: _password,
                   obscureText: _obscure,
                   textInputAction: TextInputAction.next,
+                  onChanged: (_) => _formKey.currentState?.validate(),
                   decoration: InputDecoration(
                     labelText: 'Kata sandi',
                     prefixIcon: const Icon(Icons.lock_outline),
