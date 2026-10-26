@@ -10,6 +10,7 @@ import '../screens/recommendation_screen.dart';
 import '../screens/recording_screen.dart';
 import '../screens/result_screen.dart';
 import '../screens/results_history_screen.dart';
+import '../screens/room_screen.dart';
 import '../screens/splash_screen.dart';
 import '../screens/test_prep_screen.dart';
 import '../screens/login_screen.dart';
@@ -40,6 +41,14 @@ GoRouter createAppRouter() {
       GoRoute(
         path: '/connect',
         builder: (context, state) => const ConnectScreen(),
+      ),
+      // Room screen: gerbang sebelum rekaman, dipakai oleh kedua device
+      GoRoute(
+        path: '/room/:roomId',
+        builder: (context, state) {
+          final roomId = state.pathParameters['roomId']!;
+          return RoomScreen(roomId: roomId);
+        },
       ),
       GoRoute(
         path: '/dashboard',

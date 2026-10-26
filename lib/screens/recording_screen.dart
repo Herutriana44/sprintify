@@ -2,6 +2,7 @@ import 'dart:async';
 import 'dart:io';
 
 import 'package:camera/camera.dart';
+import 'package:firebase_database/firebase_database.dart';
 import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
@@ -91,6 +92,12 @@ class _RecordingScreenState extends State<RecordingScreen> {
   final ScrollController _logScrollController = ScrollController();
   final LoggerService _logger = LoggerService();
 
+  // ── Room / two-device sync ──────────────────────────────────────────────────
+  // Subscription ke Firebase untuk mendengarkan status room
+  StreamSubscription<DatabaseEvent>? _roomSub;
+  // true jika device ini adalah finish device dan masih menunggu start selesai
+  bool _waitingForStart = false;
+
   @override
   void initState() {
     super.initState();
@@ -98,6 +105,8 @@ class _RecordingScreenState extends State<RecordingScreen> {
     if (_isMobile) {
       _initCamera();
     }
+    // Setup room listener sesuai peran device
+    WidgetsBinding.instance.addPostFrameCallback((_) => _initRoomSync());
   }
 
   Future<void> _initializeProcessors() async {
@@ -143,6 +152,7 @@ class _RecordingScreenState extends State<RecordingScreen> {
     _cameraManager.dispose();
     _batchProcessor?.dispose();
     _frameSavingIsolate?.dispose();
+    _roomSub?.cancel();
     super.dispose();
   }
 
@@ -155,6 +165,74 @@ class _RecordingScreenState extends State<RecordingScreen> {
       _isMobile &&
       _cameraController != null &&
       _cameraController!.value.isInitialized;
+
+  // ---------------------------------------------------------------------------
+  // Room sync
+  // ---------------------------------------------------------------------------
+
+  void _initRoomSync() {
+    final state = context.read<TSmartState>();
+    final roomId = state.idConnect;
+    final role = state.deviceRole;
+
+    // Jika tidak ada roomId atau tidak dalam mode two-device, tidak perlu sync
+    if (roomId == null || role == null) return;
+
+    final roomRef = FirebaseDatabase.instance.ref('rooms/$roomId');
+
+    if (role == 'finish') {
+      // Finish device: tunggu startRecordingDone = true sebelum bisa merekam
+      setState(() => _waitingForStart = true);
+      _addLog('Finish device: menunggu start device selesai merekam...',
+          type: LogType.app);
+
+      _roomSub = roomRef.onValue.listen((event) {
+        if (!mounted) return;
+        final data = event.snapshot.value;
+        if (data == null) return;
+
+        final map = Map<String, dynamic>.from(data as Map);
+        final startRecordingDone = map['startRecordingDone'] == true;
+
+        if (startRecordingDone && _waitingForStart) {
+          setState(() => _waitingForStart = false);
+          context.read<TSmartState>().setStartRecordingDone(true);
+          _addLog('Start device selesai. Finish device siap merekam!',
+              type: LogType.app);
+        }
+      });
+    }
+    // Start device tidak perlu listener khusus di RecordingScreen
+  }
+
+  /// Dipanggil oleh start device setelah rekaman selesai.
+  /// Memberitahu finish device via Firebase bahwa start recording sudah done.
+  Future<void> _notifyStartRecordingDone() async {
+    final state = context.read<TSmartState>();
+    final roomId = state.idConnect;
+    if (roomId == null) return;
+
+    await FirebaseDatabase.instance
+        .ref('rooms/$roomId')
+        .update({'startRecordingDone': true});
+    state.setStartRecordingDone(true);
+    _addLog('Notifikasi startRecordingDone dikirim ke Firebase.',
+        type: LogType.app);
+  }
+
+  /// Dipanggil oleh finish device setelah rekaman selesai.
+  Future<void> _notifyFinishRecordingDone() async {
+    final state = context.read<TSmartState>();
+    final roomId = state.idConnect;
+    if (roomId == null) return;
+
+    await FirebaseDatabase.instance
+        .ref('rooms/$roomId')
+        .update({'finishRecordingDone': true});
+    state.setFinishRecordingDone(true);
+    _addLog('Notifikasi finishRecordingDone dikirim ke Firebase.',
+        type: LogType.app);
+  }
 
   // ---------------------------------------------------------------------------
   // Logging
@@ -671,6 +749,14 @@ class _RecordingScreenState extends State<RecordingScreen> {
     }
     _timer?.cancel();
 
+    // Kirim notifikasi ke Firebase sesuai peran device
+    final role = context.read<TSmartState>().deviceRole;
+    if (role == 'start') {
+      await _notifyStartRecordingDone();
+    } else if (role == 'finish') {
+      await _notifyFinishRecordingDone();
+    }
+
     // Tampilkan loading dialog saat mempersiapkan data
     if (!mounted) return;
     showDialog<void>(
@@ -799,6 +885,65 @@ class _RecordingScreenState extends State<RecordingScreen> {
     );
   }
 
+  /// Layar tunggu untuk finish device: menunggu start device selesai merekam
+  Widget _buildWaitingForStartScreen(BuildContext context) {
+    final scheme = Theme.of(context).colorScheme;
+
+    return Scaffold(
+      appBar: AppBar(title: const Text('Menunggu Start Device')),
+      body: SafeArea(
+        child: Center(
+          child: Padding(
+            padding: const EdgeInsets.symmetric(horizontal: 32),
+            child: Column(
+              mainAxisAlignment: MainAxisAlignment.center,
+              children: [
+                SizedBox(
+                  width: 64,
+                  height: 64,
+                  child: CircularProgressIndicator(
+                    strokeWidth: 4,
+                    color: scheme.primary,
+                  ),
+                ),
+                const SizedBox(height: 28),
+                Icon(
+                  Icons.emoji_events_outlined,
+                  size: 48,
+                  color: scheme.secondary,
+                ),
+                const SizedBox(height: 16),
+                Text(
+                  'Finish Device Siap',
+                  style: Theme.of(context).textTheme.titleLarge?.copyWith(
+                        fontWeight: FontWeight.w700,
+                      ),
+                  textAlign: TextAlign.center,
+                ),
+                const SizedBox(height: 10),
+                Text(
+                  'Menunggu start device selesai merekam fase bersedia & berlari...',
+                  style: Theme.of(context).textTheme.bodyMedium?.copyWith(
+                        color: scheme.onSurfaceVariant,
+                      ),
+                  textAlign: TextAlign.center,
+                ),
+                const SizedBox(height: 8),
+                Text(
+                  'Rekaman akan dimulai otomatis setelah start device selesai.',
+                  style: Theme.of(context).textTheme.bodySmall?.copyWith(
+                        color: scheme.onSurfaceVariant,
+                      ),
+                  textAlign: TextAlign.center,
+                ),
+              ],
+            ),
+          ),
+        ),
+      ),
+    );
+  }
+
   @override
   Widget build(BuildContext context) {
     // Tahan mode perekaman sampai semua isolate (pose detection thread 2 +
@@ -806,6 +951,11 @@ class _RecordingScreenState extends State<RecordingScreen> {
     // full-screen agar user tahu apa yang sedang berlangsung.
     if (!_processorReady) {
       return _buildInitializationScreen(context);
+    }
+
+    // Finish device: tampilkan waiting screen sampai start device selesai merekam
+    if (_waitingForStart) {
+      return _buildWaitingForStartScreen(context);
     }
 
     final state = context.watch<TSmartState>();

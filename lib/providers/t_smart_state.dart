@@ -26,6 +26,15 @@ class TSmartState extends ChangeNotifier {
   bool _finishStatus = false;
   DateTime? _finishDateTime;
 
+  // ── Room / sync state ─────────────────────────────────────────────────────
+  // true ketika kedua device sudah masuk ke RoomScreen dan siap merekam
+  bool _startDeviceReady = false;
+  bool _finishDeviceReady = false;
+  // Menandai bahwa start-device sudah menekan "Mulai" dan rekaman start
+  // sudah selesai, sehingga finish-device bisa mulai merekam setelah start.
+  bool _startRecordingDone = false;
+  bool _finishRecordingDone = false;
+
   // ── Getters ────────────────────────────────────────────────────────────────
   List<Athlete> get athletes => List.unmodifiable(_athletes);
   List<RunResult> get history => List.unmodifiable(_history);
@@ -43,6 +52,18 @@ class TSmartState extends ChangeNotifier {
   DateTime? get startDateTime => _startDateTime;
   bool get finishStatus => _finishStatus;
   DateTime? get finishDateTime => _finishDateTime;
+  // Room / sync getters
+  bool get startDeviceReady => _startDeviceReady;
+  bool get finishDeviceReady => _finishDeviceReady;
+  bool get startRecordingDone => _startRecordingDone;
+  bool get finishRecordingDone => _finishRecordingDone;
+  /// true ketika kedua device sudah ada di room dan start sudah ditekan
+  bool get bothDevicesReady => _startDeviceReady && _finishDeviceReady;
+  /// Durasi berlari dalam detik (selisih finish - start), null jika belum
+  double? get runElapsedSeconds {
+    if (_startDateTime == null || _finishDateTime == null) return null;
+    return _finishDateTime!.difference(_startDateTime!).inMilliseconds / 1000.0;
+  }
 
 
   // ---------------------------------------------------------------------------
@@ -73,6 +94,41 @@ class TSmartState extends ChangeNotifier {
   void setFinishStatus(bool status) {
     _finishStatus = status;
     if (status) _finishDateTime = DateTime.now();
+    notifyListeners();
+  }
+
+  // ── Room / sync setters ─────────────────────────────────────────────────────
+
+  void setStartDeviceReady(bool value) {
+    _startDeviceReady = value;
+    notifyListeners();
+  }
+
+  void setFinishDeviceReady(bool value) {
+    _finishDeviceReady = value;
+    notifyListeners();
+  }
+
+  void setStartRecordingDone(bool value) {
+    _startRecordingDone = value;
+    notifyListeners();
+  }
+
+  void setFinishRecordingDone(bool value) {
+    _finishRecordingDone = value;
+    notifyListeners();
+  }
+
+  /// Reset semua state room untuk sesi baru
+  void resetRoomState() {
+    _startStatus = false;
+    _finishStatus = false;
+    _startDateTime = null;
+    _finishDateTime = null;
+    _startDeviceReady = false;
+    _finishDeviceReady = false;
+    _startRecordingDone = false;
+    _finishRecordingDone = false;
     notifyListeners();
   }
 
