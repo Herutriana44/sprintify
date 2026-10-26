@@ -98,10 +98,14 @@ class AuthService extends ChangeNotifier {
   // ---------------------------------------------------------------------------
 
   Future<void> signOut() async {
-    await Future.wait([
-      _auth.signOut(),
-      _gsi.signOut(),
-    ]);
+    // Only sign out from Google if GSI was ever initialized (i.e. user logged
+    // in via Google). Calling _gsi.signOut() for email-only sessions would
+    // instantiate a fresh GoogleSignIn object and may throw on iOS.
+    final futures = <Future<void>>[_auth.signOut()];
+    if (_googleSignIn != null) {
+      futures.add(_googleSignIn!.signOut());
+    }
+    await Future.wait(futures);
     notifyListeners();
   }
 

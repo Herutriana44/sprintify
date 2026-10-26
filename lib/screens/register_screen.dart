@@ -129,7 +129,6 @@ class _RegisterScreenState extends State<RegisterScreen> {
                   controller: _password,
                   obscureText: _obscure,
                   textInputAction: TextInputAction.next,
-                  onChanged: (_) => _formKey.currentState?.validate(),
                   decoration: InputDecoration(
                     labelText: 'Kata sandi',
                     prefixIcon: const Icon(Icons.lock_outline),
@@ -150,6 +149,7 @@ class _RegisterScreenState extends State<RegisterScreen> {
                   controller: _confirmPassword,
                   obscureText: _obscureConfirm,
                   textInputAction: TextInputAction.done,
+                  onChanged: (_) => _formKey.currentState?.validate(),
                   onFieldSubmitted: (_) => _submit(),
                   decoration: InputDecoration(
                     labelText: 'Konfirmasi kata sandi',

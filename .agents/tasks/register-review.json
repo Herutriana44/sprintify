@@ -1,0 +1,10 @@
+{
+  "verdict": "CHANGES_REQUESTED",
+  "findings": [
+    "signOut crashes for email-only sessions — signOut() always calls _gsi.signOut() via the lazy _gsi getter, initializing GoogleSignIn even for email-only users. On iOS this is likely to throw PlatformException. Guard with: if (_googleSignIn != null) await _googleSignIn!.signOut()",
+    "Premature confirm-password error — onChanged on the password field triggers full-form validation on every keystroke, causing the confirm-password field to immediately show 'Kata sandi tidak cocok' before the user has typed anything. Move the onChanged to the confirm-password field or add a touched guard.",
+    "Fatal .env load stops all environments — a missing .env now shows a black error screen instead of continuing. This is intentional hardening but must be documented as a required setup step in README/onboarding.",
+    "Android Firebase misconfiguration is now silent — passing null options on Android means a missing/wrong google-services.json won't fail at init time; it will fail cryptically at the first API call. Add a post-init sanity check to surface this faster in development."
+  ],
+  "reviewDoc": "c:\\Users\\herutriana44\\Documents\\PROJEK_FREELANCE_BISNIS_DAN_PITCHING\\sprintify\\.agents\\tasks\\register-review.md"
+}
