@@ -110,17 +110,26 @@ class AuthService extends ChangeNotifier {
   // ---------------------------------------------------------------------------
 
   Future<void> _postLoginSetup(User user, {String? name}) async {
+    // Profile creation — non-fatal: user proceeds to /role-selection regardless,
+    // but log clearly so failures are visible in debug output.
     try {
       await _firestoreService.createUserIfNotExists(
         uid: user.uid,
         email: user.email ?? '',
         name: name ?? user.displayName ?? '',
       );
+    } catch (e) {
+      debugPrint('AuthService _postLoginSetup: profile creation failed — $e');
+    }
+
+    // Migration and seed — non-fatal by design.
+    try {
       await _migration.runMigrations(user.uid);
       await _migration.seedIfEmpty(user.uid);
     } catch (e) {
-      debugPrint('AuthService post-login setup error: $e');
+      debugPrint('AuthService _postLoginSetup: migration/seed failed — $e');
     }
+
     notifyListeners();
   }
 
