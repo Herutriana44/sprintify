@@ -147,7 +147,8 @@ class AuthService extends ChangeNotifier {
       case 'user-disabled':
         return 'Akun ini telah dinonaktifkan.';
       default:
-        return 'Gagal masuk ($code). Coba lagi.';
+        debugPrint('AuthService._friendlyError: unhandled code=$code');
+        return 'Terjadi kesalahan. Coba lagi.';
     }
   }
 }

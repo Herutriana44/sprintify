@@ -125,8 +125,11 @@ class _LoginScreenState extends State<LoginScreen> {
                       onPressed: () => setState(() => _obscure = !_obscure),
                     ),
                   ),
-                  validator: (v) =>
-                      v == null || v.isEmpty ? 'Kata sandi wajib diisi' : null,
+                  validator: (v) {
+                    if (v == null || v.isEmpty) return 'Kata sandi wajib diisi';
+                    if (v.length < 6) return 'Minimal 6 karakter';
+                    return null;
+                  },
                 ),
                 const SizedBox(height: 28),
                 FilledButton(
