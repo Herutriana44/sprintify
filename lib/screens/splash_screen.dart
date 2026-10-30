@@ -1,8 +1,5 @@
-import 'package:flutter/foundation.dart'
-    show defaultTargetPlatform, kIsWeb, TargetPlatform;
 import 'package:flutter/material.dart';
 import 'package:go_router/go_router.dart';
-import 'package:permission_handler/permission_handler.dart';
 import 'package:firebase_auth/firebase_auth.dart'; // Added
 import 'package:provider/provider.dart'; // Added
 import '../providers/t_smart_state.dart'; // Added
@@ -24,10 +21,7 @@ class _SplashScreenState extends State<SplashScreen> {
   }
 
   Future<void> _bootstrap() async {
-    await Future.wait<void>([
-      _requestAllPermissions(),
-      Future<void>.delayed(const Duration(milliseconds: 1800)),
-    ]);
+    await Future<void>.delayed(const Duration(milliseconds: 1800));
     if (!mounted) return;
 
     final auth = FirebaseAuth.instance;
@@ -53,22 +47,6 @@ class _SplashScreenState extends State<SplashScreen> {
         // Unknown role, treat as not logged in/configured
         context.go('/login');
       }
-    }
-  }
-
-  Future<void> _requestAllPermissions() async {
-    if (kIsWeb) return;
-    if (defaultTargetPlatform != TargetPlatform.android &&
-        defaultTargetPlatform != TargetPlatform.iOS) { return; }
-    try {
-      await [
-        Permission.camera,
-        Permission.microphone,
-        Permission.videos,
-        Permission.photos,
-      ].request();
-    } catch (e) {
-      debugPrint('Error requesting permissions: $e');
     }
   }
 
@@ -103,4 +81,3 @@ class _SplashScreenState extends State<SplashScreen> {
     );
   }
 }
-

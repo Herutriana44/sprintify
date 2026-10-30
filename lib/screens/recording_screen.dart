@@ -306,9 +306,22 @@ class _RecordingScreenState extends State<RecordingScreen> {
     });
     // Reset _isBusy setiap kali kamera di-init ulang
     _isBusy = false;
-    final cam = await Permission.camera.status;
-    final mic = await Permission.microphone.status;
-    if (!cam.isGranted || !mic.isGranted) {
+    var cameraGranted = (await Permission.camera.status).isGranted;
+    var microphoneGranted = (await Permission.microphone.status).isGranted;
+    if (!mounted) return;
+
+    if (!cameraGranted || !microphoneGranted) {
+      final statuses = await [
+        Permission.camera,
+        Permission.microphone,
+      ].request();
+      if (!mounted) return;
+      cameraGranted = statuses[Permission.camera]?.isGranted ?? false;
+      microphoneGranted =
+          statuses[Permission.microphone]?.isGranted ?? false;
+    }
+
+    if (!cameraGranted || !microphoneGranted) {
       if (mounted) {
         setState(() {
           _cameraInitializing = false;
