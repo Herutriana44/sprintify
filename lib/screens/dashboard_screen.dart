@@ -62,6 +62,18 @@ class DashboardScreen extends StatelessWidget {
               label: const Text('Mulai Tes Lari'),
             ),
             const SizedBox(height: 12),
+            FilledButton.icon(
+              onPressed: () => context.push('/exercise-prep'),
+              icon: const Icon(Icons.fitness_center),
+              label: const Text('Mulai Tes Fisik'),
+              style: FilledButton.styleFrom(
+                backgroundColor:
+                    Theme.of(context).colorScheme.secondaryContainer,
+                foregroundColor:
+                    Theme.of(context).colorScheme.onSecondaryContainer,
+              ),
+            ),
+            const SizedBox(height: 12),
             OutlinedButton.icon(
               onPressed: () => context.push('/results-history'),
               icon: const Icon(Icons.history),

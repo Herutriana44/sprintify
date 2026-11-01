@@ -1,0 +1,9 @@
+buatkan fitur tambahan AI/Computer Vision untuk menilai Push Up, Pull Up, Sit Up, dan Squat Jump. Flow nya sama dengan lari, bedanya hanya 1 device saja.
+
+Untuk push up, pull up, dan squat jump, terdapat 2 area untuk menghitung jumlah push up, pull up, dan squat jump yang dilakukan. Untuk sit up, dihitung dari wajah yang terdeteksi. semuanya(kecuali lari) terdapat hitung mundur(opsi 3, 5, 10 detik untuk preparasi sebelum mulai).
+
+untuk penilaian, yang dihitung adalah jumlah push up, pull up, squat jump, dan sit up yang dilakukan oleh pengguna serta beberapa frame dari video yang diambil untuk analisis.
+
+catatan:
+1. Buat planning dulu
+2. Buat kodenya dulu, jangan running apapun, hingga semua kode sudah ditulis.

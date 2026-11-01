@@ -1,7 +1,10 @@
 import 'package:flutter/foundation.dart';
 
 import '../models/athlete.dart';
+import '../models/exercise_result.dart';
+import '../models/exercise_type.dart';
 import '../models/pending_analysis.dart';
+import '../models/pending_exercise.dart';
 import '../models/performance_category.dart';
 import '../models/run_result.dart';
 import '../models/test_mode.dart';
@@ -10,12 +13,18 @@ class TSmartState extends ChangeNotifier {
   // ── Local state ────────────────────────────────────────────────────────────
   final List<Athlete> _athletes = [];
   final List<RunResult> _history = [];
+  final List<ExerciseResult> _exerciseHistory = [];
 
   int _totalAttempts = 0;
   RunResult? _lastRunResult;
   Athlete? _selectedAthlete;
   TestMode _testMode = TestMode.videoOnly;
   PendingAnalysis? pendingAnalysis;
+
+  // ── Exercise state ─────────────────────────────────────────────────────────
+  PendingExercise? pendingExercise;
+  ExerciseResult? _lastExerciseResult;
+  ExerciseType _selectedExerciseType = ExerciseType.pushUp;
 
   // ── Two-device specific state ──────────────────────────────────────────────
   String? _currentAccountId;
@@ -38,8 +47,11 @@ class TSmartState extends ChangeNotifier {
   // ── Getters ────────────────────────────────────────────────────────────────
   List<Athlete> get athletes => List.unmodifiable(_athletes);
   List<RunResult> get history => List.unmodifiable(_history);
+  List<ExerciseResult> get exerciseHistory => List.unmodifiable(_exerciseHistory);
   int get totalAttempts => _totalAttempts;
   RunResult? get lastRunResult => _lastRunResult;
+  ExerciseResult? get lastExerciseResult => _lastExerciseResult;
+  ExerciseType get selectedExerciseType => _selectedExerciseType;
   Athlete? get selectedAthlete => _selectedAthlete;
   TestMode get testMode => _testMode;
   bool get loading => false;
@@ -187,6 +199,50 @@ class TSmartState extends ChangeNotifier {
   }
 
   // ---------------------------------------------------------------------------
+  // Exercise state
+  // ---------------------------------------------------------------------------
+
+  void setSelectedExerciseType(ExerciseType type) {
+    _selectedExerciseType = type;
+    notifyListeners();
+  }
+
+  void setPendingExercise(PendingExercise data) {
+    pendingExercise = data;
+    notifyListeners();
+  }
+
+  Future<void> completeExercise({
+    required String aiAnalysis,
+    required List<String> recommendations,
+    required PerformanceCategory category,
+  }) async {
+    final athlete = _selectedAthlete;
+    final pending = pendingExercise;
+    if (athlete == null || pending == null) return;
+
+    final result = ExerciseResult(
+      athleteId: athlete.id,
+      athleteName: athlete.name,
+      exerciseType: pending.exerciseType,
+      repCount: pending.repCount,
+      durationSeconds: pending.durationSeconds,
+      category: category,
+      recordedAt: DateTime.now(),
+      analysisNote: aiAnalysis,
+      recommendations: recommendations,
+    );
+
+    _lastExerciseResult = result;
+    pendingExercise = null;
+
+    _exerciseHistory.insert(0, result);
+    _totalAttempts = _history.length + _exerciseHistory.length;
+
+    notifyListeners();
+  }
+
+  // ---------------------------------------------------------------------------
   // Complete run
   // ---------------------------------------------------------------------------
 
@@ -227,7 +283,7 @@ class TSmartState extends ChangeNotifier {
     pendingAnalysis = null;
 
     _history.insert(0, result);
-    _totalAttempts = _history.length;
+    _totalAttempts = _history.length + _exerciseHistory.length;
 
     notifyListeners();
   }

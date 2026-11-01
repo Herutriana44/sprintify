@@ -5,6 +5,10 @@ import '../screens/athlete_detail_screen.dart';
 import '../screens/athlete_form_screen.dart';
 import '../screens/athletes_screen.dart';
 import '../screens/dashboard_screen.dart';
+import '../screens/exercise_prep_screen.dart';
+import '../screens/exercise_processing_screen.dart';
+import '../screens/exercise_recording_screen.dart';
+import '../screens/exercise_result_screen.dart';
 import '../screens/processing_screen.dart';
 import '../screens/recommendation_screen.dart';
 import '../screens/recording_screen.dart';
@@ -82,6 +86,29 @@ GoRouter createAppRouter() {
         path: '/results-history',
         builder: (context, state) => const ResultsHistoryScreen(),
       ),
+
+      // ── Tes Fisik (Push Up, Pull Up, Sit Up, Squat Jump) ──────────────────
+      GoRoute(
+        path: '/exercise-prep',
+        builder: (context, state) => const ExercisePrepScreen(),
+      ),
+      GoRoute(
+        path: '/exercise-recording',
+        builder: (context, state) {
+          final extra = state.extra as Map<String, dynamic>?;
+          final countdownSeconds = (extra?['countdownSeconds'] as int?) ?? 5;
+          return ExerciseRecordingScreen(countdownSeconds: countdownSeconds);
+        },
+      ),
+      GoRoute(
+        path: '/exercise-processing',
+        builder: (context, state) => const ExerciseProcessingScreen(),
+      ),
+      GoRoute(
+        path: '/exercise-result',
+        builder: (context, state) => const ExerciseResultScreen(),
+      ),
+
       GoRoute(
         path: '/athletes',
         builder: (context, state) => const AthletesScreen(),
